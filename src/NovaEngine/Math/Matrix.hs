@@ -22,6 +22,8 @@ module NovaEngine.Math.Matrix
     mulM44,
     mulM44V4,
     transpose,
+    inverse,
+    mkTransformM44,
   )
 where
 
@@ -172,3 +174,61 @@ transpose (M44 (V4 a00 a10 a20 a30) (V4 a01 a11 a21 a31) (V4 a02 a12 a22 a32) (V
     (V4 a10 a11 a12 a13)
     (V4 a20 a21 a22 a23)
     (V4 a30 a31 a32 a33)
+
+-- | Inverse of a 4×4 matrix via cofactor expansion.
+-- Returns 'identity' for singular matrices.
+inverse :: M44 -> M44
+inverse (M44 (V4 m00 m10 m20 m30) (V4 m01 m11 m21 m31) (V4 m02 m12 m22 m32) (V4 m03 m13 m23 m33)) =
+  let s0 = m00 * m11 - m10 * m01
+      s1 = m00 * m12 - m10 * m02
+      s2 = m00 * m13 - m10 * m03
+      s3 = m01 * m12 - m11 * m02
+      s4 = m01 * m13 - m11 * m03
+      s5 = m02 * m13 - m12 * m03
+      c5 = m22 * m33 - m32 * m23
+      c4 = m21 * m33 - m31 * m23
+      c3 = m21 * m32 - m31 * m22
+      c2 = m20 * m33 - m30 * m23
+      c1 = m20 * m32 - m30 * m22
+      c0 = m20 * m31 - m30 * m21
+      det = s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0
+   in if abs det < 1.0e-12
+        then identity
+        else
+          let invDet = 1.0 / det
+           in M44
+                ( V4
+                    ((m11 * c5 - m12 * c4 + m13 * c3) * invDet)
+                    ((negate m10 * c5 + m12 * c2 - m13 * c1) * invDet)
+                    ((m10 * c4 - m11 * c2 + m13 * c0) * invDet)
+                    ((negate m10 * c3 + m11 * c1 - m12 * c0) * invDet)
+                )
+                ( V4
+                    ((negate m01 * c5 + m02 * c4 - m03 * c3) * invDet)
+                    ((m00 * c5 - m02 * c2 + m03 * c1) * invDet)
+                    ((negate m00 * c4 + m01 * c2 - m03 * c0) * invDet)
+                    ((m00 * c3 - m01 * c1 + m02 * c0) * invDet)
+                )
+                ( V4
+                    ((m31 * s5 - m32 * s4 + m33 * s3) * invDet)
+                    ((negate m30 * s5 + m32 * s2 - m33 * s1) * invDet)
+                    ((m30 * s4 - m31 * s2 + m33 * s0) * invDet)
+                    ((negate m30 * s3 + m31 * s1 - m32 * s0) * invDet)
+                )
+                ( V4
+                    ((negate m21 * s5 + m22 * s4 - m23 * s3) * invDet)
+                    ((m20 * s5 - m22 * s2 + m23 * s1) * invDet)
+                    ((negate m20 * s4 + m21 * s2 - m23 * s0) * invDet)
+                    ((m20 * s3 - m21 * s1 + m22 * s0) * invDet)
+                )
+
+-- | Build a model matrix from rotation and translation.
+-- Equivalent to @translation t * rotation q@.
+mkTransformM44 :: Quaternion -> V3 -> M44
+mkTransformM44 q (V3 tx ty tz) =
+  let M44 (V4 r00 r10 r20 _) (V4 r01 r11 r21 _) (V4 r02 r12 r22 _) _ = rotation q
+   in M44
+        (V4 r00 r10 r20 0)
+        (V4 r01 r11 r21 0)
+        (V4 r02 r12 r22 0)
+        (V4 tx ty tz 1)

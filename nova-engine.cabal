@@ -1,6 +1,6 @@
 cabal-version:      3.4
 name:               nova-engine
-version:            0.1.0.0
+version:            0.2.0.0
 synopsis:           3D graphics engine — C99 Vulkan + SDL2 hot path, Haskell brain
 description:
   A general-purpose 3D graphics engine. C99 hot path (Vulkan rendering,
@@ -25,25 +25,57 @@ extra-doc-files:
 library
   exposed-modules:
     NovaEngine
+    -- Math
     NovaEngine.Math.Types
     NovaEngine.Math.Vector
     NovaEngine.Math.Matrix
     NovaEngine.Math.Quaternion
+    -- Mesh
+    NovaEngine.Mesh.Types
+    NovaEngine.Mesh.Buffer
+    NovaEngine.Mesh.Combine
+    NovaEngine.Mesh.Primitives
+    NovaEngine.Mesh.Curve
+    NovaEngine.Mesh.Surface
+    NovaEngine.Mesh.Loft
+    NovaEngine.Mesh.Icosphere
+    NovaEngine.Mesh.Hull
+    NovaEngine.Mesh.Deform
+    NovaEngine.Mesh.Subdivision
+    NovaEngine.Mesh.Smooth
+    NovaEngine.Mesh.Simplify
+    NovaEngine.Mesh.Weld
+    NovaEngine.Mesh.Remesh
+    NovaEngine.Mesh.Boolean
+    NovaEngine.Mesh.Symmetry
+    NovaEngine.Mesh.UV
+    NovaEngine.Mesh.LOD
+    NovaEngine.Mesh.Export
+    NovaEngine.Mesh.Import
+    -- SDF
+    NovaEngine.SDF
+    NovaEngine.SDF.Isosurface
+    NovaEngine.SDF.DualContour
+    -- Noise
+    NovaEngine.Noise
+    -- Terrain
+    NovaEngine.Terrain
+    NovaEngine.Terrain.Scatter
+    -- Animation
+    NovaEngine.Animation.Skeleton
+    NovaEngine.Animation.Pose
+    NovaEngine.Animation.Animate
+    NovaEngine.Animation.IK
+    NovaEngine.Animation.Skin
+    NovaEngine.Animation.Morph
+    -- Spatial
+    NovaEngine.Spatial.Raycast
 
   c-sources:
     cbits/nv_ffi.c
 
   include-dirs:     cbits
   cc-options:       -std=c99 -Wall -Wextra -Wpedantic -Werror
-
-  -- System libraries added when render subsystem is built:
-  -- if os(darwin)
-  --   frameworks:     Cocoa IOKit CoreVideo
-  --   extra-libraries: vulkan SDL2
-  -- if os(linux)
-  --   extra-libraries: vulkan SDL2
-  -- if os(windows)
-  --   extra-libraries: vulkan SDL2
 
   build-depends:
       base          >= 4.19 && < 5
@@ -54,6 +86,7 @@ library
 
   hs-source-dirs:   src
   default-language:  GHC2021
+  default-extensions: StrictData
   ghc-options:
     -Wall
     -Wcompat
@@ -70,10 +103,12 @@ test-suite nova-engine-test
   build-depends:
       base          >= 4.19 && < 5
     , nova-engine
+    , containers    >= 0.6  && < 0.8
     , QuickCheck    >= 2.14 && < 2.16
     , tasty         >= 1.4  && < 1.6
     , tasty-quickcheck >= 0.10 && < 0.12
   default-language: GHC2021
+  default-extensions: StrictData
   ghc-options:      -Wall -Wcompat
 
 source-repository head

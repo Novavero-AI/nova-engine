@@ -5,9 +5,9 @@
 -- @
 -- import NovaEngine            -- everything
 -- import NovaEngine.Math       -- vectors, matrices, quaternions
--- import NovaEngine.Mesh       -- geometry generation (future)
--- import NovaEngine.Animation  -- skeletal animation (future)
--- import NovaEngine.Terrain    -- heightmaps, noise (future)
+-- import NovaEngine.Mesh       -- geometry generation
+-- import NovaEngine.Animation  -- skeletal animation
+-- import NovaEngine.Terrain    -- heightmaps, noise
 -- import NovaEngine.Render     -- Vulkan + SDL2 rendering (future)
 -- @
 module NovaEngine
