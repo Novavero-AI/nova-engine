@@ -29,7 +29,11 @@ static VkShaderModule load_shader(VkDevice device, const char *path) {
         fclose(f);
         return VK_NULL_HANDLE;
     }
-    fread(code, 1, (size_t)size, f);
+    if (fread(code, 1, (size_t)size, f) != (size_t)size) {
+        free(code);
+        fclose(f);
+        return VK_NULL_HANDLE;
+    }
     fclose(f);
 
     VkShaderModuleCreateInfo info;
