@@ -42,6 +42,7 @@ jobs:
 
   c-check:
     name: C99 Strict
+    needs: [lint, format]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -88,7 +89,7 @@ jobs:
 
   cabal-check:
     name: Cabal Check
-    needs: [lint, format, c-check]
+    needs: [c-check]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -104,7 +105,7 @@ jobs:
 
   build:
     name: Build (${{ matrix.name }})
-    needs: [lint, format, c-check, cabal-check]
+    needs: [cabal-check]
     timeout-minutes: 60
     strategy:
       fail-fast: false
