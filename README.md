@@ -1,13 +1,14 @@
 <div align="center">
 <h1>nova-engine</h1>
 <p><strong>3D Graphics Engine</strong></p>
-<p>C99 Vulkan + SDL2 hot path. Haskell brain.</p>
+<p>C99 Vulkan + SDL3 hot path. VMA memory management. Haskell brain.</p>
 <p><a href="#architecture">Architecture</a> · <a href="#modules">Modules</a> · <a href="#quick-start">Quick Start</a> · <a href="#building">Building</a> · <a href="#roadmap">Roadmap</a></p>
 <p>
 
 [![CI](https://github.com/Novavero-AI/nova-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Novavero-AI/nova-engine/actions/workflows/ci.yml)
 ![Haskell](https://img.shields.io/badge/haskell-GHC%209.8-purple)
 ![C99](https://img.shields.io/badge/C99-hot%20path-orange)
+![Vulkan](https://img.shields.io/badge/vulkan-1.0-red)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
 
 </p>
@@ -15,9 +16,9 @@
 
 ---
 
-A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering, SDL2 windowing, command recording, buffer management). Haskell handles the brain (mesh generation, skeletal animation, terrain, frame orchestration). Pure math, zero unnecessary deps.
+A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering, SDL3 windowing, VMA memory management, command recording). Haskell handles the brain (mesh generation, skeletal animation, terrain, frame orchestration). Pure math, zero unnecessary deps.
 
-**39 modules. 255 property tests. 16,000+ lines of pure Haskell.**
+**48 modules. 255 property tests. 18,000+ lines of Haskell + C99.**
 
 ---
 
@@ -32,12 +33,14 @@ A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering
 │  Animation, Spatial, Frame orchestration    │
 ├─────────────────────────────────────────────┤
 │  FFI Boundary (unsafe ccall, flat args)     │
-│  NovaEngine.Render.FFI.*                    │
+│  NovaEngine.Render.*                        │
 ├─────────────────────────────────────────────┤
-│  C99 Hot Path                               │
-│  nv_instance  nv_swapchain  nv_pipeline     │
-│  nv_buffer  nv_texture  nv_command          │
-│  nv_sync  nv_window  nv_ffi                 │
+│  C99 Hot Path (VMA-backed)                  │
+│  nv_window     nv_instance   nv_device      │
+│  nv_allocator  nv_swapchain  nv_pipeline    │
+│  nv_buffer     nv_frame      nv_descriptor  │
+├─────────────────────────────────────────────┤
+│  Vendored: VMA 3.1.0 (nv_vma.cpp)          │
 └─────────────────────────────────────────────┘
 ```
 
@@ -118,21 +121,22 @@ A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering
 |--------|-------------|
 | `Spatial.Raycast` | Ray-triangle intersection (Moller-Trumbore), BVH-accelerated ray-mesh queries |
 
-### Render (next up — C99 hot path)
+### Render (C99 Vulkan + SDL3)
 
-| C99 Module | Description |
-|------------|-------------|
-| `nv_instance` | Vulkan instance, validation layers, physical device selection, logical device |
-| `nv_swapchain` | Swapchain creation, recreation, image views |
-| `nv_pipeline` | Render pass, graphics pipeline, descriptor layouts, framebuffers |
-| `nv_buffer` | Vertex, index, uniform, SSBO buffer management |
-| `nv_texture` | Image creation, staging upload, samplers |
-| `nv_command` | Command pool, command buffer recording, draw calls |
-| `nv_descriptor` | Descriptor pool, sets, layouts |
-| `nv_sync` | Fences, semaphores, frame-in-flight synchronization |
-| `nv_window` | SDL2 window creation, Vulkan surface |
-| `nv_frame` | Acquire, submit, present cycle |
-| `nv_ffi` | FFI entry points, version, top-level init |
+| C99 Module | Haskell Wrapper | Description |
+|------------|-----------------|-------------|
+| `nv_window` | `Render.Window` | SDL3 window creation, Vulkan surface, HiDPI, event polling |
+| `nv_instance` | `Render.Instance` | VkInstance, validation layers, debug messenger, GPU selection and scoring |
+| `nv_device` | `Render.Device` | Logical device, graphics/present queues, command pool |
+| `nv_allocator` | `Render.Allocator` | VMA-backed GPU memory allocator, staged upload, host-visible buffers |
+| `nv_swapchain` | `Render.Swapchain` | Swapchain creation/recreation, image views, VMA-backed depth buffer |
+| `nv_pipeline` | `Render.Pipeline` | Render pass, graphics pipeline, framebuffers, descriptor set layout support |
+| `nv_buffer` | `Render.Buffer` | VMA-backed vertex and index buffer upload via staging |
+| `nv_frame` | `Render.Frame` | 2 frames in flight, semaphores/fences, command recording, descriptor binding |
+| `nv_descriptor` | `Render.Descriptor` | Descriptor set layouts, pools, allocation, buffer/image write helpers |
+| `nv_vma` | — | C-linkage wrapper around VMA (only C++ in the project) |
+
+**Shaders:** `default.vert` (MVP push constant), `default.frag` (directional N dot L lighting, SRGB output)
 
 ---
 
@@ -183,12 +187,13 @@ main = do
 
 ## Design
 
-- **C99 hot path.** Vulkan and SDL2 calls run in C99 — zero FFI overhead in the render loop.
+- **C99 hot path.** Vulkan and SDL3 calls run in C99 — zero FFI overhead in the render loop.
+- **VMA memory.** All GPU allocations go through Vulkan Memory Allocator — no raw `vkAllocateMemory`, no 4096 allocation limit.
 - **Haskell brain.** Mesh generation, animation, terrain, SDF, noise — complex algorithms with type safety.
-- **Minimal deps.** Haskell: `base`, `bytestring`, `text`, `containers`, `array`. System: `libvulkan`, `libSDL2`.
+- **Minimal deps.** Haskell: `base`, `bytestring`, `text`, `containers`, `array`. System: `libvulkan`, `libSDL3`. Vendored: VMA 3.1.0.
 - **Pure math.** All geometry, animation, and noise functions are pure. No IO, no GPU, no mutable state.
 - **Total.** No partial functions. Invalid inputs return `Nothing`, not crashes.
-- **Hand-rolled.** No `linear`, `vector`, `JuicyPixels`, or Haskell Vulkan/SDL2 bindings. The math is ours. The C is ours.
+- **Hand-rolled.** No `linear`, `vector`, `JuicyPixels`, or Haskell Vulkan/SDL bindings. The math is ours. The C is ours.
 
 ---
 
@@ -209,6 +214,8 @@ Right-handed, Y-up. Counter-clockwise front faces. All angles in radians. UV: U 
 
 ## Building
 
+**System dependencies:** `libvulkan`, `libSDL3`, `pkg-config`, a C++ compiler (for VMA).
+
 ```bash
 cabal build all --ghc-options="-Werror"
 cabal test --test-show-details=streaming
@@ -228,33 +235,66 @@ cabal test --test-show-details=streaming
 - Animation (skeleton, pose, FK, IK, skinning, morph targets)
 - Spatial (ray-mesh intersection, BVH)
 - 255 property tests
+- C99 Vulkan + SDL3 render layer (window, instance, device, swapchain, pipeline, buffer, frame)
+- VMA integration (all GPU memory sub-allocated, zero raw vkAllocateMemory)
+- Descriptor set management (layouts, pools, allocation, buffer/image writes)
+- CI: HLint, Ormolu, C99 strict check, cross-platform build (Linux, macOS, Windows)
 
-### Next: C99 Vulkan + SDL2 Render Layer
+### Phase 2: Textures
 
-The Haskell brain is complete. Next is the C99 hot path — the actual rendering:
+- [ ] Vendor stb_image.h for image loading (PNG, JPG, BMP, TGA)
+- [ ] VkImage creation with mipmap generation (vkCmdBlitImage chain)
+- [ ] VkSampler (linear, repeat, anisotropy)
+- [ ] Texture descriptor binding via Phase 1 descriptor infrastructure
+- [ ] Default textures (1x1 white, 1x1 flat normal)
+- [ ] Haskell FFI: `Render.Texture`, `Render.ImageLoad`
 
-1. **SDL2 windowing** (`nv_window.c`) — window creation, Vulkan surface, input events
-2. **Vulkan instance** (`nv_instance.c`) — instance creation, validation layers, device selection
-3. **Swapchain** (`nv_swapchain.c`) — creation, recreation on resize, image views
-4. **Render pass and pipeline** (`nv_pipeline.c`) — render pass, graphics pipeline, framebuffers
-5. **Buffers** (`nv_buffer.c`) — vertex, index, uniform, SSBO allocation and upload
-6. **Descriptors** (`nv_descriptor.c`) — descriptor pool, sets, layouts
-7. **Textures** (`nv_texture.c`) — image creation, staging buffer upload, samplers
-8. **Command recording** (`nv_command.c`) — command pool, buffer recording, draw calls
-9. **Synchronization** (`nv_sync.c`) — fences, semaphores, frame-in-flight
-10. **Frame lifecycle** (`nv_frame.c`) — acquire, submit, present
-11. **GLSL shaders** — PBR (Cook-Torrance), skinned vertex, 2D orthographic
-12. **Haskell render orchestration** (`NovaEngine.Render.*`) — engine init, frame loop, scene resolution, material setup
+### Phase 3: Scene System
 
-### Future
+- [ ] Entity storage (IntMap-based, pure Haskell)
+- [ ] Transform hierarchy with single-pass world transform computation
+- [ ] Camera (perspective, orthographic)
+- [ ] Mesh registry (mesh handle to GPU buffer mapping)
+- [ ] Multi-object draw loop
 
-- Scene system (content-addressed YAML store)
-- PBR material pipeline
-- Skeletal animation GPU skinning (bone SSBO)
-- Terrain rendering pipeline
-- Instanced rendering (foliage, particles)
-- Hot reload (DLL/SO/dylib)
-- UI system
+### Phase 4: PBR Materials
+
+- [ ] Cook-Torrance BRDF (GGX distribution, Smith geometry, Fresnel-Schlick)
+- [ ] Metallic-roughness workflow with 5 texture slots (albedo, metallic-roughness, normal, AO, emissive)
+- [ ] Per-frame UBO (view, projection, camera position, lights)
+- [ ] PBR vertex + fragment shaders
+
+### Phase 5: Shadows
+
+- [ ] Cascaded shadow maps (4 cascades, directional light)
+- [ ] Depth-only render pass and shadow vertex shader
+- [ ] PCF soft shadows in PBR fragment shader
+
+### Phase 6: Post-Processing
+
+- [ ] HDR framebuffer (RGBA16F)
+- [ ] Bloom (Jimenez 13-tap downsample + tent upsample)
+- [ ] ACES tonemapping
+- [ ] FXAA 3.11
+
+### Phase 7: GPU Animation
+
+- [ ] Bone matrix SSBO with vertex shader skinning
+- [ ] 80-byte skinned vertex format (base 64B + bone IDs + weights)
+- [ ] `computeBoneMatrices` bridge from Haskell animation system
+
+### Phase 8: Compute
+
+- [ ] VkComputePipeline infrastructure
+- [ ] Morph target compute shader
+- [ ] Compute-to-vertex pipeline barrier
+
+### Phase 9-12: Terrain Rendering, Input/Audio, Physics, Debug
+
+- [ ] GPU terrain (clipmap/CDLOD, heightmap displacement, splatmap)
+- [ ] SDL3 input action mapping, spatial audio
+- [ ] Pure Haskell physics (GJK/EPA, rigid body, sequential impulse solver)
+- [ ] Dear ImGui integration, GPU profiling, debug line rendering
 
 ---
 

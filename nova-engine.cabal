@@ -1,6 +1,6 @@
 cabal-version:      3.4
 name:               nova-engine
-version:            0.2.0.0
+version:            0.3.0.0
 synopsis:           3D graphics engine — C99 Vulkan + SDL3 hot path, Haskell brain
 description:
   A general-purpose 3D graphics engine. C99 hot path (Vulkan rendering,

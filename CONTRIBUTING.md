@@ -2,7 +2,7 @@
 
 ## Architecture
 
-nova-engine is a 3D graphics engine. C99 hot path for Vulkan rendering and SDL2 windowing. Haskell brain for mesh generation, animation, terrain, and frame orchestration.
+nova-engine is a 3D graphics engine. C99 hot path for Vulkan rendering, SDL3 windowing, and VMA memory management. Haskell brain for mesh generation, animation, terrain, and frame orchestration.
 
 ### Module Structure
 
@@ -61,16 +61,23 @@ NovaEngine.Animation.Morph        -- blend shapes
 -- Spatial (queries)
 NovaEngine.Spatial.Raycast        -- ray-triangle, BVH
 
--- Render (planned — C99 hot path)
-NovaEngine.Render.*               -- Vulkan + SDL2 rendering
-NovaEngine.Render.FFI.*           -- foreign imports for C99 layer
+-- Render (C99 hot path via FFI)
+NovaEngine.Render.Window          -- SDL3 window, Vulkan surface, events
+NovaEngine.Render.Instance        -- VkInstance, validation, GPU selection
+NovaEngine.Render.Device          -- logical device, queues, command pool
+NovaEngine.Render.Allocator       -- VMA-backed GPU memory allocator
+NovaEngine.Render.Swapchain       -- swapchain, image views, depth buffer
+NovaEngine.Render.Pipeline        -- render pass, graphics pipeline, framebuffers
+NovaEngine.Render.Buffer          -- VMA-backed vertex/index buffer upload
+NovaEngine.Render.Frame           -- frame-in-flight sync, command recording
+NovaEngine.Render.Descriptor      -- descriptor set layouts, pools, writes
 ```
 
 ### C99 Layer (`cbits/`)
 
-All C symbols use the `nv_` prefix. FFI entry points live in `nv_ffi.c/h`.
+All C symbols use the `nv_` prefix. Each module has its own header.
 
-**Naming:** `nv_<subsystem>_<function>` (e.g., `nv_buffer_create`, `nv_command_draw`).
+**Naming:** `nv_<subsystem>_<function>` (e.g., `nv_buffer_create_vertex`, `nv_frame_begin`).
 
 **Style:**
 - C99 strict (`-std=c99 -Wall -Wextra -Wpedantic -Werror`)
@@ -78,11 +85,15 @@ All C symbols use the `nv_` prefix. FFI entry points live in `nv_ffi.c/h`.
 - Explicit sizes (`uint8_t`, `uint32_t`, etc.) — never `int` for sized data
 - No heap allocation on hot path — stack buffers and caller-provided memory
 - Bounds checking on every buffer operation
+- Return NULL on allocation failure
 
 **FFI Pattern:**
-- Hot path: `foreign import ccall unsafe` with flat scalar arguments
-- Stateful structs: opaque `ForeignPtr ()` with `mallocForeignPtrBytes`
-- Multiple outputs: `alloca` + `peek` pattern
+- `foreign import ccall unsafe` with flat scalar arguments
+- Opaque `ForeignPtr ()` with C finalizers registered via `newForeignPtr`
+- `withXxxPtr :: Xxx -> (Ptr () -> IO a) -> IO a` for safe pointer access
+- Descriptor sets passed as `Word64` (Vulkan non-dispatchable handles)
+
+**C++ Exception:** `nv_vma.cpp` is the only C++ file. It compiles VMA and provides C-linkage wrappers. All other engine code is pure C99.
 
 ### Haskell Layer (`src/`)
 
@@ -112,11 +123,21 @@ Use the `vertex` smart constructor for default white color. Use the `Vertex` con
 
 **Haskell:** `base`, `bytestring`, `text`, `containers`, `array`
 
-**System:** `libvulkan`, `libSDL2` (linked via `extra-libraries` when render subsystem is active)
+**System:** `libvulkan`, `libSDL3` (via pkg-config)
 
-No `linear`, `vector`, `JuicyPixels`, `vulkan` (Haskell package), or `sdl2` (Haskell package).
+**Vendored:** `vk_mem_alloc.h` (VMA 3.1.0, MIT) — compiled as C++ via `nv_vma.cpp`
+
+No `linear`, `vector`, `JuicyPixels`, `vulkan` (Haskell package), or `sdl2`/`sdl3` (Haskell package).
 Matrix math is hand-rolled. Buffer uploads use `Foreign.Marshal.Array` from `base`.
 Textures take raw `[Word8]` RGBA bytes.
+
+### Memory Management
+
+All GPU memory goes through VMA via `nv_allocator.c`. No direct `vkAllocateMemory` calls.
+
+- **Device-local buffers:** `nv_alloc_buffer_staged` (host-visible staging → device-local transfer)
+- **Host-visible buffers:** `nv_alloc_buffer_host` (for UBOs updated per frame)
+- **Images:** `nv_alloc_image_create` (device-local, used for depth buffer and textures)
 
 ## Build
 

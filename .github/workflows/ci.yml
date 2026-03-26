@@ -50,7 +50,8 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libvulkan-dev pkg-config cmake ninja-build
+          sudo apt-get install -y -qq libvulkan-dev pkg-config cmake ninja-build \
+            libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev
 
           # SDL3: build from source (not in Ubuntu repos yet)
           if ! pkg-config --exists sdl3 2>/dev/null; then
@@ -125,7 +126,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libvulkan-dev pkg-config
+          sudo apt-get install -y -qq libvulkan-dev pkg-config \
+            libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev
 
           # SDL3: build from source if not packaged
           if ! pkg-config --exists sdl3 2>/dev/null; then
