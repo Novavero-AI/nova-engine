@@ -41,6 +41,43 @@ jobs:
             test/**/*.hs
 
   # ---------------------------------------------------------------------------
+  # C99 strict check (standalone, no Haskell toolchain needed)
+  # ---------------------------------------------------------------------------
+
+  c-check:
+    name: C99 Strict
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libvulkan-dev libsdl2-dev pkg-config
+          # SDL3 may not be in default repos — install headers manually
+          # if libsdl3-dev is unavailable. For now, check C syntax only.
+
+      - name: Compile C99 sources (syntax + warnings)
+        run: |
+          # Verify every .c file compiles under C99 strict mode.
+          # Uses -fsyntax-only so we don't need to link.
+          for f in cbits/nv_*.c; do
+            echo "checking $f"
+            cc -std=c99 -Wall -Wextra -Wpedantic -Werror -fsyntax-only \
+              -I cbits \
+              $(pkg-config --cflags vulkan 2>/dev/null || echo "-I/usr/include") \
+              $(pkg-config --cflags sdl3 2>/dev/null || echo "") \
+              "$f"
+          done
+
+      - name: Compile C++ VMA wrapper (syntax)
+        run: |
+          c++ -std=c++14 -fsyntax-only -w \
+            -I cbits \
+            $(pkg-config --cflags vulkan 2>/dev/null || echo "-I/usr/include") \
+            cbits/nv_vma.cpp
+
+  # ---------------------------------------------------------------------------
   # Packaging check (Linux-only)
   # ---------------------------------------------------------------------------
 
@@ -78,6 +115,56 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install system deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libvulkan-dev pkg-config
+
+          # SDL3: build from source if not packaged
+          if ! pkg-config --exists sdl3 2>/dev/null; then
+            sudo apt-get install -y -qq cmake ninja-build
+            git clone --depth 1 --branch release-3.2.8 \
+              https://github.com/libsdl-org/SDL.git /tmp/SDL3
+            cmake -S /tmp/SDL3 -B /tmp/SDL3/build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DSDL_SHARED=ON -DSDL_STATIC=OFF \
+              -DSDL_TEST=OFF -DSDL_EXAMPLES=OFF
+            cmake --build /tmp/SDL3/build
+            sudo cmake --install /tmp/SDL3/build
+            sudo ldconfig
+          fi
+
+      - name: Install system deps (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install sdl3 vulkan-headers molten-vk
+
+      - name: Install system deps (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Vulkan SDK
+          $VK_VERSION = "1.4.304.1"
+          $VK_URL = "https://sdk.lunarg.com/sdk/download/$VK_VERSION/windows/VulkanSDK-$VK_VERSION-Installer.exe"
+          Invoke-WebRequest -Uri $VK_URL -OutFile "$env:TEMP\vulkan-sdk.exe"
+          Start-Process -Wait -FilePath "$env:TEMP\vulkan-sdk.exe" -ArgumentList "--accept-licenses --default-answer --confirm-command install"
+          $env:VULKAN_SDK = "C:\VulkanSDK\$VK_VERSION"
+          echo "VULKAN_SDK=$env:VULKAN_SDK" >> $env:GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$env:VULKAN_SDK\Lib\pkgconfig;$env:PKG_CONFIG_PATH" >> $env:GITHUB_ENV
+          echo "$env:VULKAN_SDK\Bin" >> $env:GITHUB_PATH
+
+          # SDL3 (pre-built dev libs)
+          $SDL_VERSION = "3.2.8"
+          $SDL_URL = "https://github.com/libsdl-org/SDL/releases/download/release-$SDL_VERSION/SDL3-devel-$SDL_VERSION-mingw.zip"
+          Invoke-WebRequest -Uri $SDL_URL -OutFile "$env:TEMP\sdl3.zip"
+          Expand-Archive -Path "$env:TEMP\sdl3.zip" -DestinationPath "$env:TEMP\sdl3"
+          $SDL_DIR = "$env:TEMP\sdl3\SDL3-$SDL_VERSION\x86_64-w64-mingw32"
+          echo "PKG_CONFIG_PATH=$SDL_DIR\lib\pkgconfig;$env:PKG_CONFIG_PATH" >> $env:GITHUB_ENV
+
+          # pkg-config (via choco)
+          choco install pkgconfiglite -y
+
       - uses: haskell-actions/setup@v2
         id: setup-haskell
         with:
@@ -88,8 +175,8 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ${{ steps.setup-haskell.outputs.cabal-store }}
-          key: cabal-${{ runner.os }}-v1-${{ hashFiles('nova-engine.cabal') }}
-          restore-keys: cabal-${{ runner.os }}-v1-
+          key: cabal-${{ runner.os }}-v2-${{ hashFiles('nova-engine.cabal') }}
+          restore-keys: cabal-${{ runner.os }}-v2-
 
       - name: Build
         run: cabal build --enable-tests --ghc-options="-Werror"
