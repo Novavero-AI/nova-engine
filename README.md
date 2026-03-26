@@ -2,7 +2,7 @@
 <h1>nova-engine</h1>
 <p><strong>3D Graphics Engine</strong></p>
 <p>C99 Vulkan + SDL2 hot path. Haskell brain.</p>
-<p><a href="#architecture">Architecture</a> · <a href="#modules">Modules</a> · <a href="#quick-start">Quick Start</a> · <a href="#building">Building</a></p>
+<p><a href="#architecture">Architecture</a> · <a href="#modules">Modules</a> · <a href="#quick-start">Quick Start</a> · <a href="#building">Building</a> · <a href="#roadmap">Roadmap</a></p>
 <p>
 
 [![CI](https://github.com/Novavero-AI/nova-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Novavero-AI/nova-engine/actions/workflows/ci.yml)
@@ -17,6 +17,8 @@
 
 A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering, SDL2 windowing, command recording, buffer management). Haskell handles the brain (mesh generation, skeletal animation, terrain, frame orchestration). Pure math, zero unnecessary deps.
 
+**39 modules. 255 property tests. 16,000+ lines of pure Haskell.**
+
 ---
 
 ## Architecture
@@ -26,8 +28,8 @@ A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering
 │           User Application                  │
 ├─────────────────────────────────────────────┤
 │  Haskell Brain                              │
-│  Math, Mesh, Animation, Terrain,            │
-│  Frame orchestration, Resource lifecycle    │
+│  Math, Mesh, SDF, Noise, Terrain,           │
+│  Animation, Spatial, Frame orchestration    │
 ├─────────────────────────────────────────────┤
 │  FFI Boundary (unsafe ccall, flat args)     │
 │  NovaEngine.Render.FFI.*                    │
@@ -47,57 +49,90 @@ A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering
 
 | Module | Description |
 |--------|-------------|
-| `Math.Types` | `V2`, `V3`, `V4`, `Quaternion`, `M44`, `VecSpace` abstraction |
+| `Math.Types` | `V2`, `V3`, `V4`, `Quaternion`, `M44`, `VecSpace`, `Storable` instances |
 | `Math.Vector` | Dot, cross, normalize, lerp, distance, safe operations |
 | `Math.Quaternion` | Axis-angle, Hamilton product, SLERP, rotation |
-| `Math.Matrix` | Identity, perspective, ortho, lookAt, multiply, transpose |
+| `Math.Matrix` | Identity, perspective, ortho, lookAt, multiply, transpose, inverse |
 
-### Mesh (planned)
+### Mesh
 
 | Module | Description |
 |--------|-------------|
-| `Mesh.Primitives` | Sphere, capsule, cylinder, cone, torus, box, plane |
+| `Mesh.Types` | Unified 64-byte `Vertex` (pos, normal, UV, tangent, color), `Mesh` with `Monoid`, validation |
+| `Mesh.Primitives` | Sphere, capsule, cylinder, cone, torus, box, plane, tapered cylinder |
 | `Mesh.Curve` | Bezier, B-spline, NURBS with arc-length parameterization |
-| `Mesh.Surface` | Bezier patches, B-spline and NURBS surfaces |
-| `Mesh.Loft` | Revolve, loft, extrude, sweep with Bishop frames |
-| `Mesh.SDF` | Signed distance fields, CSG, smooth blending, domain ops |
-| `Mesh.Isosurface` | Marching cubes with vertex caching |
-| `Mesh.DualContour` | Dual contouring with QEF for sharp features |
-| `Mesh.Subdivision` | Catmull-Clark, Loop subdivision |
-| `Mesh.Simplify` | Quadric error metric decimation |
+| `Mesh.Surface` | Bezier patches, B-spline and NURBS surface tessellation |
+| `Mesh.Loft` | Revolve, loft, extrude, sweep with rotation-minimizing Bishop frames |
+| `Mesh.Icosphere` | Geodesic sphere from icosahedron subdivision |
+| `Mesh.Hull` | Incremental 3D convex hull |
+| `Mesh.Subdivision` | Catmull-Clark (quads, any topology), Loop (triangles) |
+| `Mesh.Smooth` | Laplacian smoothing, Taubin volume-preserving smoothing |
+| `Mesh.Simplify` | Quadric error metric decimation (Garland-Heckbert) |
+| `Mesh.Weld` | Spatial-hash vertex welding, degenerate triangle removal |
+| `Mesh.Remesh` | Isotropic remeshing (split, collapse, flip, relax) |
 | `Mesh.Boolean` | CSG union, intersection, difference |
+| `Mesh.Symmetry` | Mirror (X/Y/Z/arbitrary plane), radial symmetry |
+| `Mesh.UV` | Planar, cylindrical, spherical, box UV projection |
+| `Mesh.LOD` | Level-of-detail chain generation with screen-size selection |
+| `Mesh.Deform` | Twist, bend, taper, free-form deformation lattices, displacement |
+| `Mesh.Combine` | Translate, rotate, scale, merge, recompute normals and tangents |
+| `Mesh.Buffer` | GPU-ready interleaved and separate attribute packing |
+| `Mesh.Export` | Wavefront OBJ and glTF 2.0 export (pure, no deps) |
+| `Mesh.Import` | OBJ and glTF 2.0 import with built-in JSON and base64 parsers |
 
-### Animation (planned)
-
-| Module | Description |
-|--------|-------------|
-| `Animation.Skeleton` | Joint trees, humanoid and quadruped builders |
-| `Animation.Pose` | Forward kinematics, pose interpolation |
-| `Animation.Animate` | Procedural oscillators, keyframes, easing, blending |
-| `Animation.IK` | CCD and FABRIK solvers with joint constraints |
-| `Animation.Skin` | Linear blend skinning, dual quaternion skinning |
-| `Animation.Morph` | Mesh morphing, blend shapes |
-
-### Terrain (planned)
+### SDF
 
 | Module | Description |
 |--------|-------------|
-| `Terrain.Terrain` | Heightmap generation, erosion simulation |
-| `Terrain.Noise` | Perlin, simplex, Worley, FBM, ridged multifractal |
+| `SDF` | Primitives, CSG, smooth blending, domain ops (translate, rotate, scale, repeat, twist, bend, taper) |
+| `SDF.Isosurface` | Marching cubes with grid caching and edge-vertex deduplication |
+| `SDF.DualContour` | Dual contouring with QEF solving for sharp features |
 
-### Render (planned — C99 hot path)
+### Noise
+
+| Module | Description |
+|--------|-------------|
+| `Noise` | Improved Perlin (2D/3D), simplex (2D/3D/4D), Worley/cellular, FBM, ridged multifractal, turbulence, domain warping |
+
+### Terrain
+
+| Module | Description |
+|--------|-------------|
+| `Terrain` | Heightmap generation, thermal and hydraulic erosion, terracing, plateau, clamping |
+| `Terrain.Scatter` | Uniform, Poisson disk, and weighted point distribution |
+
+### Animation
+
+| Module | Description |
+|--------|-------------|
+| `Animation.Skeleton` | Joint trees, validation, humanoid and quadruped builders |
+| `Animation.Pose` | Forward kinematics (O(n) tree traversal), pose interpolation and composition |
+| `Animation.Animate` | Procedural oscillators, keyframes, easing, blending, sequencing, looping |
+| `Animation.IK` | CCD and FABRIK solvers with hinge and cone constraints |
+| `Animation.Skin` | Linear blend skinning, dual quaternion skinning, auto-weight generation |
+| `Animation.Morph` | Full mesh morphing, multi-target blend shapes |
+
+### Spatial
+
+| Module | Description |
+|--------|-------------|
+| `Spatial.Raycast` | Ray-triangle intersection (Moller-Trumbore), BVH-accelerated ray-mesh queries |
+
+### Render (next up — C99 hot path)
 
 | C99 Module | Description |
 |------------|-------------|
-| `nv_instance` | Vulkan instance, physical device selection, logical device |
-| `nv_swapchain` | Swapchain creation and recreation |
-| `nv_pipeline` | Render pass, graphics pipeline, descriptor layouts |
+| `nv_instance` | Vulkan instance, validation layers, physical device selection, logical device |
+| `nv_swapchain` | Swapchain creation, recreation, image views |
+| `nv_pipeline` | Render pass, graphics pipeline, descriptor layouts, framebuffers |
 | `nv_buffer` | Vertex, index, uniform, SSBO buffer management |
-| `nv_texture` | Image creation, layout transitions, texture upload |
-| `nv_command` | Command buffer recording, draw calls |
+| `nv_texture` | Image creation, staging upload, samplers |
+| `nv_command` | Command pool, command buffer recording, draw calls |
+| `nv_descriptor` | Descriptor pool, sets, layouts |
 | `nv_sync` | Fences, semaphores, frame-in-flight synchronization |
 | `nv_window` | SDL2 window creation, Vulkan surface |
-| `nv_ffi` | FFI entry points (flat scalar arguments) |
+| `nv_frame` | Acquire, submit, present cycle |
+| `nv_ffi` | FFI entry points, version, top-level init |
 
 ---
 
@@ -105,10 +140,39 @@ A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering
 
 ```haskell
 import NovaEngine
+import NovaEngine.Mesh.Primitives
+import NovaEngine.Mesh.Combine
+import NovaEngine.Mesh.Export
+import NovaEngine.Noise
+import NovaEngine.SDF
+import NovaEngine.SDF.Isosurface
 
 main :: IO ()
 main = do
-  -- Math foundation is ready now
+  -- Generate a sphere
+  let Just mesh = sphere 1.0 32 16
+
+  -- Combine meshes
+  let scene = merge
+        [ mesh
+        , translate (V3 3 0 0) mesh
+        , translate (V3 (-3) 0 0) mesh
+        ]
+
+  -- Export to OBJ
+  writeFile "scene.obj" (meshToOBJ scene)
+
+  -- SDF: blend two spheres and extract surface
+  let sdf = smoothUnion 0.5
+              (sdfSphere 1.0)
+              (sdfTranslate (V3 1.5 0 0) (sdfSphere 1.0))
+      Just blob = isosurface sdf (-3) 3 (-3) 3 (-3) 3 64 64 64
+
+  -- Noise-driven terrain
+  let cfg = mkNoiseConfig 42
+      height x z = fbm (perlin2D cfg) 6 2.0 0.5 (x * 0.1) (z * 0.1)
+
+  -- View/projection math
   let proj = perspective (pi / 4) (16 / 9) 0.1 100
       view = lookAt (V3 0 2 5) (V3 0 0 0) (V3 0 1 0)
       mvp  = mulM44 proj view
@@ -120,16 +184,17 @@ main = do
 ## Design
 
 - **C99 hot path.** Vulkan and SDL2 calls run in C99 — zero FFI overhead in the render loop.
-- **Haskell brain.** Mesh generation, animation, terrain — complex algorithms with type safety.
+- **Haskell brain.** Mesh generation, animation, terrain, SDF, noise — complex algorithms with type safety.
 - **Minimal deps.** Haskell: `base`, `bytestring`, `text`, `containers`, `array`. System: `libvulkan`, `libSDL2`.
-- **Pure math.** All geometry and animation functions are pure. No IO, no GPU, no mutable state.
+- **Pure math.** All geometry, animation, and noise functions are pure. No IO, no GPU, no mutable state.
 - **Total.** No partial functions. Invalid inputs return `Nothing`, not crashes.
+- **Hand-rolled.** No `linear`, `vector`, `JuicyPixels`, or Haskell Vulkan/SDL2 bindings. The math is ours. The C is ours.
 
 ---
 
 ## Coordinate System
 
-Right-handed, Y-up. Counter-clockwise front faces. All angles in radians.
+Right-handed, Y-up. Counter-clockwise front faces. All angles in radians. UV: U wraps circumferentially, V runs along height.
 
 ```
     Y (up)
@@ -146,14 +211,50 @@ Right-handed, Y-up. Counter-clockwise front faces. All angles in radians.
 
 ```bash
 cabal build all --ghc-options="-Werror"
-cabal test
+cabal test --test-show-details=streaming
 ```
 
 ---
 
-## Status
+## Roadmap
 
-**Early development.** Math foundation complete. Mesh, animation, terrain, and render subsystems in progress.
+### Done
+
+- Math foundation (vectors, matrices, quaternions, Storable instances)
+- Mesh generation (20 modules: primitives, curves, surfaces, subdivision, simplification, booleans, import/export)
+- SDF (signed distance fields, marching cubes, dual contouring)
+- Noise (Perlin, simplex, Worley, FBM, ridged, turbulence, domain warp)
+- Terrain (heightmap generation, thermal/hydraulic erosion, scatter)
+- Animation (skeleton, pose, FK, IK, skinning, morph targets)
+- Spatial (ray-mesh intersection, BVH)
+- 255 property tests
+
+### Next: C99 Vulkan + SDL2 Render Layer
+
+The Haskell brain is complete. Next is the C99 hot path — the actual rendering:
+
+1. **SDL2 windowing** (`nv_window.c`) — window creation, Vulkan surface, input events
+2. **Vulkan instance** (`nv_instance.c`) — instance creation, validation layers, device selection
+3. **Swapchain** (`nv_swapchain.c`) — creation, recreation on resize, image views
+4. **Render pass and pipeline** (`nv_pipeline.c`) — render pass, graphics pipeline, framebuffers
+5. **Buffers** (`nv_buffer.c`) — vertex, index, uniform, SSBO allocation and upload
+6. **Descriptors** (`nv_descriptor.c`) — descriptor pool, sets, layouts
+7. **Textures** (`nv_texture.c`) — image creation, staging buffer upload, samplers
+8. **Command recording** (`nv_command.c`) — command pool, buffer recording, draw calls
+9. **Synchronization** (`nv_sync.c`) — fences, semaphores, frame-in-flight
+10. **Frame lifecycle** (`nv_frame.c`) — acquire, submit, present
+11. **GLSL shaders** — PBR (Cook-Torrance), skinned vertex, 2D orthographic
+12. **Haskell render orchestration** (`NovaEngine.Render.*`) — engine init, frame loop, scene resolution, material setup
+
+### Future
+
+- Scene system (content-addressed YAML store)
+- PBR material pipeline
+- Skeletal animation GPU skinning (bone SSBO)
+- Terrain rendering pipeline
+- Instanced rendering (foliage, particles)
+- Hot reload (DLL/SO/dylib)
+- UI system
 
 ---
 
