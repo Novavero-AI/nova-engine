@@ -70,12 +70,28 @@ library
     NovaEngine.Animation.Morph
     -- Spatial
     NovaEngine.Spatial.Raycast
+    -- Render
+    NovaEngine.Render.Window
+    NovaEngine.Render.Instance
+    NovaEngine.Render.Device
+    NovaEngine.Render.Swapchain
+    NovaEngine.Render.Pipeline
+    NovaEngine.Render.Buffer
+    NovaEngine.Render.Frame
 
   c-sources:
     cbits/nv_ffi.c
+    cbits/nv_window.c
+    cbits/nv_instance.c
+    cbits/nv_device.c
+    cbits/nv_swapchain.c
+    cbits/nv_pipeline.c
+    cbits/nv_buffer.c
+    cbits/nv_frame.c
 
   include-dirs:     cbits
   cc-options:       -std=c99 -Wall -Wextra -Wpedantic -Werror
+  pkgconfig-depends: sdl3, vulkan
 
   build-depends:
       base          >= 4.19 && < 5
