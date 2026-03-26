@@ -1,8 +1,8 @@
 -- | Vulkan vertex and index buffer upload.
 --
 -- Wraps the C99 @nv_buffer_*@ functions.  Uploads mesh data to
--- device-local GPU memory via a staging buffer.  Integrates with
--- 'NovaEngine.Mesh.Buffer.packInterleaved' and
+-- device-local GPU memory via a VMA-backed staging buffer.
+-- Integrates with 'NovaEngine.Mesh.Buffer.packInterleaved' and
 -- 'NovaEngine.Mesh.Buffer.packIndices'.
 module NovaEngine.Render.Buffer
   ( -- * Handle
@@ -28,8 +28,8 @@ import Foreign.ForeignPtr
 import Foreign.Marshal.Array (withArrayLen)
 import Foreign.Ptr (FunPtr, Ptr, castPtr, nullPtr)
 import Foreign.Storable (sizeOf)
+import NovaEngine.Render.Allocator (Allocator, withAllocatorPtr)
 import NovaEngine.Render.Device (Device, withDevicePtr)
-import NovaEngine.Render.Instance (Instance, withInstancePtr)
 
 -- ----------------------------------------------------------------
 -- Handle
@@ -60,14 +60,14 @@ foreign import ccall unsafe "&nv_buffer_destroy"
 -- | Upload vertex data to a device-local GPU buffer.
 --
 -- Accepts the output of 'NovaEngine.Mesh.Buffer.packInterleaved'.
--- Uses a staging buffer for the transfer.
+-- Uses a VMA-backed staging buffer for the transfer.
 --
 -- Returns 'Nothing' if allocation or transfer fails.
 createVertexBuffer ::
-  Device -> Instance -> [Float] -> IO (Maybe Buffer)
-createVertexBuffer dev inst floats =
+  Device -> Allocator -> [Float] -> IO (Maybe Buffer)
+createVertexBuffer dev alloc floats =
   withDevicePtr dev $ \devPtr ->
-    withInstancePtr inst $ \instPtr ->
+    withAllocatorPtr alloc $ \allocPtr ->
       withArrayLen floats $ \len dataPtr -> do
         let bytes =
               fromIntegral len
@@ -75,7 +75,7 @@ createVertexBuffer dev inst floats =
         ptr <-
           c_nv_buffer_create_vertex
             devPtr
-            instPtr
+            allocPtr
             (castPtr dataPtr)
             bytes
         wrapBuffer ptr
@@ -83,14 +83,14 @@ createVertexBuffer dev inst floats =
 -- | Upload index data to a device-local GPU buffer.
 --
 -- Accepts the output of 'NovaEngine.Mesh.Buffer.packIndices'.
--- Uses a staging buffer for the transfer.
+-- Uses a VMA-backed staging buffer for the transfer.
 --
 -- Returns 'Nothing' if allocation or transfer fails.
 createIndexBuffer ::
-  Device -> Instance -> [Word32] -> IO (Maybe Buffer)
-createIndexBuffer dev inst indices =
+  Device -> Allocator -> [Word32] -> IO (Maybe Buffer)
+createIndexBuffer dev alloc indices =
   withDevicePtr dev $ \devPtr ->
-    withInstancePtr inst $ \instPtr ->
+    withAllocatorPtr alloc $ \allocPtr ->
       withArrayLen indices $ \len dataPtr -> do
         let bytes =
               fromIntegral len
@@ -98,7 +98,7 @@ createIndexBuffer dev inst indices =
         ptr <-
           c_nv_buffer_create_index
             devPtr
-            instPtr
+            allocPtr
             (castPtr dataPtr)
             bytes
         wrapBuffer ptr

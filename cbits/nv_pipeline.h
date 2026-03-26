@@ -19,7 +19,7 @@
 #include "nv_device.h"
 #include "nv_swapchain.h"
 
-/* Push constant size: one mat4 (MVP). */
+/* Push constant size: one mat4 (model). */
 #define NV_PUSH_CONSTANT_SIZE 64
 
 /* ----------------------------------------------------------------
@@ -41,10 +41,14 @@ typedef struct NvPipeline {
 
 /* Create render pass, pipeline, and framebuffers.
  * vert_path / frag_path are paths to compiled SPIR-V files.
+ * set_layouts / set_layout_count define descriptor set layouts
+ * to include in the pipeline layout (may be NULL / 0).
  * Returns NULL on failure. */
 NvPipeline *nv_pipeline_create(NvDevice *dev, NvSwapchain *sc,
                                const char *vert_path,
-                               const char *frag_path);
+                               const char *frag_path,
+                               const VkDescriptorSetLayout *set_layouts,
+                               uint32_t set_layout_count);
 
 /* Destroy framebuffers, pipeline, layout, render pass, and free. */
 void nv_pipeline_destroy(NvPipeline *pip);

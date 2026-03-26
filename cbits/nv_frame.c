@@ -259,3 +259,13 @@ void nv_frame_draw_indexed(NvFrame *fr, uint32_t index_count) {
 void nv_frame_draw(NvFrame *fr, uint32_t vertex_count) {
     vkCmdDraw(fr->cmd[fr->current_frame], vertex_count, 1, 0, 0);
 }
+
+void nv_frame_bind_descriptor_set(NvFrame *fr, NvPipeline *pip,
+                                   uint32_t set_index,
+                                   uint64_t descriptor_set) {
+    VkDescriptorSet set = (VkDescriptorSet)(uintptr_t)descriptor_set;
+    vkCmdBindDescriptorSets(
+        fr->cmd[fr->current_frame],
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        pip->layout, set_index, 1, &set, 0, NULL);
+}

@@ -18,6 +18,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include "nv_allocator.h"
 #include "nv_device.h"
 #include "nv_instance.h"
 #include "nv_window.h"
@@ -42,11 +43,13 @@ typedef struct NvSwapchain {
     VkImageView   *image_views;
     uint32_t       image_count;
 
-    /* Depth */
-    VkImage        depth_image;
-    VkDeviceMemory depth_memory;
+    /* Depth (VMA-backed) */
+    NvAllocImage  *depth_alloc;
     VkImageView    depth_view;
     VkFormat       depth_format;
+
+    /* Back-reference for depth recreation */
+    NvAllocator   *allocator;
 } NvSwapchain;
 
 /* ----------------------------------------------------------------
@@ -57,6 +60,7 @@ typedef struct NvSwapchain {
  * Prefers B8G8R8A8_SRGB format, mailbox present mode, and
  * D32_SFLOAT depth.  Returns NULL on failure. */
 NvSwapchain *nv_swapchain_create(NvInstance *inst, NvDevice *dev,
+                                 NvAllocator *alloc,
                                  NvWindow *window);
 
 /* Destroy image views, depth resources, swapchain, and free.

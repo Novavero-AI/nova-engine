@@ -34,10 +34,11 @@ module NovaEngine.Render.Frame
     frameBindIndexBuffer,
     frameDrawIndexed,
     frameDraw,
+    frameBindDescriptorSet,
   )
 where
 
-import Data.Word (Word32)
+import Data.Word (Word32, Word64)
 import Foreign.C.Types (CInt (..))
 import Foreign.ForeignPtr
   ( ForeignPtr,
@@ -102,6 +103,10 @@ foreign import ccall unsafe "nv_frame_draw_indexed"
 
 foreign import ccall unsafe "nv_frame_draw"
   c_nv_frame_draw :: Ptr () -> Word32 -> IO ()
+
+foreign import ccall unsafe "nv_frame_bind_descriptor_set"
+  c_nv_frame_bind_descriptor_set ::
+    Ptr () -> Ptr () -> Word32 -> Word64 -> IO ()
 
 -- ----------------------------------------------------------------
 -- Lifecycle
@@ -183,3 +188,13 @@ frameDraw :: Frame -> Word32 -> IO ()
 frameDraw (Frame fptr) n =
   withForeignPtr fptr $ \frPtr ->
     c_nv_frame_draw frPtr n
+
+-- | Bind a descriptor set at the given set index.
+--
+-- The 'Word64' is a raw @VkDescriptorSet@ handle returned by
+-- 'NovaEngine.Render.Descriptor.allocateDescriptorSet'.
+frameBindDescriptorSet :: Frame -> Pipeline -> Word32 -> Word64 -> IO ()
+frameBindDescriptorSet (Frame fptr) pip setIndex descriptorSet =
+  withForeignPtr fptr $ \frPtr ->
+    withPipelinePtr pip $ \pipPtr ->
+      c_nv_frame_bind_descriptor_set frPtr pipPtr setIndex descriptorSet

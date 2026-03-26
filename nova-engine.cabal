@@ -1,10 +1,10 @@
 cabal-version:      3.4
 name:               nova-engine
 version:            0.2.0.0
-synopsis:           3D graphics engine — C99 Vulkan + SDL2 hot path, Haskell brain
+synopsis:           3D graphics engine — C99 Vulkan + SDL3 hot path, Haskell brain
 description:
   A general-purpose 3D graphics engine. C99 hot path (Vulkan rendering,
-  SDL2 windowing, command recording, buffer management) for maximum
+  SDL3 windowing, VMA memory management, command recording) for maximum
   performance. Haskell brain (mesh generation, skeletal animation,
   terrain, frame orchestration) for correct-by-construction logic.
 
@@ -74,23 +74,31 @@ library
     NovaEngine.Render.Window
     NovaEngine.Render.Instance
     NovaEngine.Render.Device
+    NovaEngine.Render.Allocator
     NovaEngine.Render.Swapchain
     NovaEngine.Render.Pipeline
     NovaEngine.Render.Buffer
     NovaEngine.Render.Frame
+    NovaEngine.Render.Descriptor
 
   c-sources:
     cbits/nv_ffi.c
     cbits/nv_window.c
     cbits/nv_instance.c
     cbits/nv_device.c
+    cbits/nv_allocator.c
     cbits/nv_swapchain.c
     cbits/nv_pipeline.c
     cbits/nv_buffer.c
     cbits/nv_frame.c
+    cbits/nv_descriptor.c
+
+  cxx-sources:      cbits/nv_vma.cpp
+  cxx-options:      -std=c++14 -w
 
   include-dirs:     cbits
   cc-options:       -std=c99 -Wall -Wextra -Wpedantic -Werror
+  extra-libraries:  stdc++
   pkgconfig-depends: sdl3, vulkan
 
   build-depends:

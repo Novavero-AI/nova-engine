@@ -122,7 +122,9 @@ static int create_render_pass(NvPipeline *pip, VkFormat color_format,
  * Pipeline layout
  * ---------------------------------------------------------------- */
 
-static int create_layout(NvPipeline *pip) {
+static int create_layout(NvPipeline *pip,
+                         const VkDescriptorSetLayout *set_layouts,
+                         uint32_t set_layout_count) {
     VkPushConstantRange push;
     memset(&push, 0, sizeof(push));
     push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
@@ -134,6 +136,8 @@ static int create_layout(NvPipeline *pip) {
     info.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     info.pushConstantRangeCount = 1;
     info.pPushConstantRanges    = &push;
+    info.setLayoutCount         = set_layout_count;
+    info.pSetLayouts            = set_layouts;
 
     return vkCreatePipelineLayout(pip->device, &info, NULL,
                                   &pip->layout)
@@ -354,7 +358,9 @@ static int create_framebuffers(NvPipeline *pip, NvSwapchain *sc) {
 
 NvPipeline *nv_pipeline_create(NvDevice *dev, NvSwapchain *sc,
                                const char *vert_path,
-                               const char *frag_path) {
+                               const char *frag_path,
+                               const VkDescriptorSetLayout *set_layouts,
+                               uint32_t set_layout_count) {
     if (!dev || !sc || !vert_path || !frag_path) {
         return NULL;
     }
@@ -368,7 +374,7 @@ NvPipeline *nv_pipeline_create(NvDevice *dev, NvSwapchain *sc,
     if (!create_render_pass(pip, sc->image_format, sc->depth_format)) {
         goto fail;
     }
-    if (!create_layout(pip)) {
+    if (!create_layout(pip, set_layouts, set_layout_count)) {
         goto fail;
     }
     if (!create_pipeline(pip, sc, vert_path, frag_path)) {

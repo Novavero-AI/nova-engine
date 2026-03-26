@@ -17,22 +17,6 @@ static uint32_t clamp_u32(uint32_t val, uint32_t lo, uint32_t hi) {
     return val;
 }
 
-static uint32_t find_memory_type(VkPhysicalDevice phys_device,
-                                 uint32_t type_filter,
-                                 VkMemoryPropertyFlags properties) {
-    VkPhysicalDeviceMemoryProperties mem_props;
-    vkGetPhysicalDeviceMemoryProperties(phys_device, &mem_props);
-
-    for (uint32_t i = 0; i < mem_props.memoryTypeCount; i++) {
-        if ((type_filter & (1u << i))
-            && (mem_props.memoryTypes[i].propertyFlags & properties)
-                   == properties) {
-            return i;
-        }
-    }
-    return UINT32_MAX;
-}
-
 /* ----------------------------------------------------------------
  * Format / present mode / extent selection
  * ---------------------------------------------------------------- */
@@ -138,13 +122,9 @@ static void destroy_depth(NvSwapchain *sc) {
         vkDestroyImageView(sc->device, sc->depth_view, NULL);
         sc->depth_view = VK_NULL_HANDLE;
     }
-    if (sc->depth_image != VK_NULL_HANDLE) {
-        vkDestroyImage(sc->device, sc->depth_image, NULL);
-        sc->depth_image = VK_NULL_HANDLE;
-    }
-    if (sc->depth_memory != VK_NULL_HANDLE) {
-        vkFreeMemory(sc->device, sc->depth_memory, NULL);
-        sc->depth_memory = VK_NULL_HANDLE;
+    if (sc->depth_alloc) {
+        nv_alloc_image_destroy(sc->depth_alloc);
+        sc->depth_alloc = NULL;
     }
 }
 
@@ -154,62 +134,21 @@ static int create_depth(NvSwapchain *sc) {
         return 0;
     }
 
-    /* Image */
-    VkImageCreateInfo img_info;
-    memset(&img_info, 0, sizeof(img_info));
-    img_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    img_info.imageType     = VK_IMAGE_TYPE_2D;
-    img_info.format        = sc->depth_format;
-    img_info.extent.width  = sc->extent.width;
-    img_info.extent.height = sc->extent.height;
-    img_info.extent.depth  = 1;
-    img_info.mipLevels     = 1;
-    img_info.arrayLayers   = 1;
-    img_info.samples       = VK_SAMPLE_COUNT_1_BIT;
-    img_info.tiling        = VK_IMAGE_TILING_OPTIMAL;
-    img_info.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    img_info.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
-    img_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    if (vkCreateImage(sc->device, &img_info, NULL, &sc->depth_image)
-        != VK_SUCCESS) {
+    /* Image via VMA */
+    sc->depth_alloc = nv_alloc_image_create(
+        sc->allocator,
+        sc->extent.width, sc->extent.height,
+        1, sc->depth_format,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    if (!sc->depth_alloc) {
         return 0;
     }
-
-    /* Memory */
-    VkMemoryRequirements reqs;
-    vkGetImageMemoryRequirements(sc->device, sc->depth_image, &reqs);
-
-    uint32_t mem_type = find_memory_type(
-        sc->physical_device, reqs.memoryTypeBits,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    if (mem_type == UINT32_MAX) {
-        vkDestroyImage(sc->device, sc->depth_image, NULL);
-        sc->depth_image = VK_NULL_HANDLE;
-        return 0;
-    }
-
-    VkMemoryAllocateInfo alloc_info;
-    memset(&alloc_info, 0, sizeof(alloc_info));
-    alloc_info.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc_info.allocationSize  = reqs.size;
-    alloc_info.memoryTypeIndex = mem_type;
-
-    if (vkAllocateMemory(sc->device, &alloc_info, NULL,
-                         &sc->depth_memory)
-        != VK_SUCCESS) {
-        vkDestroyImage(sc->device, sc->depth_image, NULL);
-        sc->depth_image = VK_NULL_HANDLE;
-        return 0;
-    }
-
-    vkBindImageMemory(sc->device, sc->depth_image, sc->depth_memory, 0);
 
     /* View */
     VkImageViewCreateInfo view_info;
     memset(&view_info, 0, sizeof(view_info));
     view_info.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    view_info.image    = sc->depth_image;
+    view_info.image    = sc->depth_alloc->handle;
     view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
     view_info.format   = sc->depth_format;
     view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -361,8 +300,9 @@ static int build_swapchain(NvSwapchain *sc, NvWindow *window) {
  * ---------------------------------------------------------------- */
 
 NvSwapchain *nv_swapchain_create(NvInstance *inst, NvDevice *dev,
+                                 NvAllocator *alloc,
                                  NvWindow *window) {
-    if (!inst || !dev || !window) {
+    if (!inst || !dev || !alloc || !window) {
         return NULL;
     }
 
@@ -376,6 +316,7 @@ NvSwapchain *nv_swapchain_create(NvInstance *inst, NvDevice *dev,
     sc->surface         = inst->surface;
     sc->graphics_family = dev->graphics_family;
     sc->present_family  = dev->present_family;
+    sc->allocator       = alloc;
 
     if (!build_swapchain(sc, window)) {
         nv_swapchain_destroy(sc);

@@ -87,4 +87,9 @@ void nv_frame_draw_indexed(NvFrame *fr, uint32_t index_count);
 /* Issue a non-indexed draw call. */
 void nv_frame_draw(NvFrame *fr, uint32_t vertex_count);
 
+/* Bind a descriptor set at the given set index. */
+void nv_frame_bind_descriptor_set(NvFrame *fr, NvPipeline *pip,
+                                   uint32_t set_index,
+                                   uint64_t descriptor_set);
+
 #endif /* NV_FRAME_H */
