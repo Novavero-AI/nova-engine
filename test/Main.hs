@@ -51,7 +51,7 @@ main = defaultMain tests
 tests :: TestTree
 tests =
   testGroup
-    "gb-mesh"
+    "nova-engine"
     [ testGroup "Types" typesTests,
       testGroup "Combine" combineTests,
       testGroup "Primitives" primitivesTests,

@@ -2,7 +2,6 @@
 
 ## 0.2.0.0
 
-- Unified gb-mesh into nova-engine with full namespace reorganization.
 - **Math:** added `Storable` instances for `V2`, `V3`, `V4`, `M44`, `Quaternion`. Added `inverse` and `mkTransformM44` to `Math.Matrix`.
 - **Mesh:** 20 modules — primitives, curves, surfaces, loft, icosphere, hull, subdivision, smooth, simplify, weld, remesh, booleans, symmetry, UV, LOD, deform, combine, buffer, export, import. Unified 64-byte `Vertex` with `vColor` field.
 - **SDF:** signed distance fields with primitives, CSG, smooth blending, domain operations. Marching cubes and dual contouring isosurface extraction.

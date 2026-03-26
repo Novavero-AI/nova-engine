@@ -391,7 +391,7 @@ gltfAssetS :: ShowS
 gltfAssetS =
   jsonObjectS
     [ ("version", jsonStringS "2.0"),
-      ("generator", jsonStringS "gb-mesh")
+      ("generator", jsonStringS "nova-engine")
     ]
 
 -- | Format a buffer view as a JSON object.
