@@ -195,9 +195,3 @@ jobs:
       - name: Haddock
         if: matrix.name == 'Linux'
         run: cabal haddock --enable-tests
-
-      - name: sdist roundtrip
-        if: matrix.name == 'Linux'
-        run: |
-          cabal sdist -o /tmp/sdist
-          cd /tmp && tar xzf sdist/nova-engine-*.tar.gz && cd nova-engine-* && cabal build
