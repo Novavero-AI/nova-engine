@@ -18,7 +18,7 @@
 
 A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering, SDL3 windowing, VMA memory management, command recording). Haskell handles the brain (mesh generation, skeletal animation, terrain, frame orchestration). Pure math, zero unnecessary deps.
 
-**48 modules. 255 property tests. 18,000+ lines of Haskell + C99.**
+**48 modules. 255 property tests.**
 
 ---
 
