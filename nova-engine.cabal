@@ -10,7 +10,7 @@ description:
 
 license:            BSD-3-Clause
 license-file:       LICENSE
-author:             Devon Tomlin, Kyle Jensen
+author:             Devon Tomlin
 maintainer:         devon.tomlin@novavero.ai
 homepage:           https://github.com/Novavero-AI/nova-engine
 bug-reports:        https://github.com/Novavero-AI/nova-engine/issues
