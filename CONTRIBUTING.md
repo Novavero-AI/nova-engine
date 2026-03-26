@@ -2,7 +2,7 @@
 
 ## Architecture
 
-nova-engine is a 3D graphics engine using the C99 hot path + Haskell brain pattern (same as nova-net).
+nova-engine is a 3D graphics engine. C99 hot path for Vulkan rendering and SDL2 windowing. Haskell brain for mesh generation, animation, terrain, and frame orchestration.
 
 ### Module Structure
 
@@ -12,7 +12,7 @@ NovaEngine.Math.Types         -- V2, V3, V4, Quaternion, M44, VecSpace
 NovaEngine.Math.Vector        -- dot, cross, normalize, lerp, distance
 NovaEngine.Math.Quaternion    -- axisAngle, mulQuat, slerp, rotateV3
 NovaEngine.Math.Matrix        -- identity, perspective, ortho, lookAt, mulM44
-NovaEngine.Mesh.*             -- geometry generation + processing (from gb-mesh)
+NovaEngine.Mesh.*             -- geometry generation + processing
 NovaEngine.Animation.*        -- skeleton, pose, skin, IK, animate, morph
 NovaEngine.Terrain.*          -- heightmaps, noise, erosion
 NovaEngine.Render.*           -- Vulkan + SDL2 rendering (C99 hot path)
@@ -33,7 +33,7 @@ All C symbols use the `nv_` prefix. FFI entry points live in `nv_ffi.c/h`.
 - No heap allocation on hot path — stack buffers and caller-provided memory
 - Bounds checking on every buffer operation
 
-**FFI Pattern (from nova-net):**
+**FFI Pattern:**
 - Hot path: `foreign import ccall unsafe` with flat scalar arguments
 - Stateful structs: opaque `ForeignPtr ()` with `mallocForeignPtrBytes`
 - Multiple outputs: `alloca` + `peek` pattern
