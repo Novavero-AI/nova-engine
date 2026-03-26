@@ -146,7 +146,7 @@ jobs:
       - name: Install system deps (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install sdl3 vulkan-headers molten-vk
+          brew install sdl3 vulkan-headers vulkan-loader molten-vk
 
       - name: Install system deps (Windows)
         if: runner.os == 'Windows'
