@@ -80,6 +80,10 @@ library
     NovaEngine.Render.Buffer
     NovaEngine.Render.Frame
     NovaEngine.Render.Descriptor
+    NovaEngine.Render.Texture
+    -- Scene
+    NovaEngine.Scene
+    NovaEngine.Scene.Camera
 
   c-sources:
     cbits/nv_ffi.c
@@ -92,6 +96,8 @@ library
     cbits/nv_buffer.c
     cbits/nv_frame.c
     cbits/nv_descriptor.c
+    cbits/nv_texture.c
+    cbits/nv_stb_image.c
 
   cxx-sources:      cbits/nv_vma.cpp
   cxx-options:      -std=c++14 -w

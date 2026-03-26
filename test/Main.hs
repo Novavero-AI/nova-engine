@@ -5,16 +5,28 @@
 
 module Main (main) where
 
+import Data.Bits (shiftL)
 import Data.IntMap.Strict qualified as IntMap
 import Data.List (isInfixOf)
 import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.Word (Word64)
 import NovaEngine.Animation.Animate
-import NovaEngine.Animation.IK
+import NovaEngine.Animation.IK hiding (lookAt)
 import NovaEngine.Animation.Morph
 import NovaEngine.Animation.Pose
 import NovaEngine.Animation.Skeleton
 import NovaEngine.Animation.Skin
+import NovaEngine.Math.Matrix
+  ( identity,
+    lookAt,
+    mulM44,
+    ortho,
+    perspective,
+    rotation,
+    scaling,
+    translation,
+  )
+import NovaEngine.Math.Types (M44 (..))
 import NovaEngine.Mesh.Boolean
 import NovaEngine.Mesh.Combine
 import NovaEngine.Mesh.Curve
@@ -36,9 +48,12 @@ import NovaEngine.Mesh.Types
 import NovaEngine.Mesh.UV
 import NovaEngine.Mesh.Weld
 import NovaEngine.Noise
+import NovaEngine.Render.Texture (calcMipLevels)
 import NovaEngine.SDF
 import NovaEngine.SDF.DualContour
 import NovaEngine.SDF.Isosurface
+import NovaEngine.Scene
+import NovaEngine.Scene.Camera
 import NovaEngine.Spatial.Raycast
 import NovaEngine.Terrain
 import NovaEngine.Terrain.Scatter
@@ -84,7 +99,10 @@ tests =
       testGroup "LOD" lodTests,
       testGroup "Raycast" raycastTests,
       testGroup "Remesh" remeshTests,
-      testGroup "Import" importTests
+      testGroup "Import" importTests,
+      testGroup "Texture" textureTests,
+      testGroup "Scene" sceneTests,
+      testGroup "Camera" cameraTests
     ]
 
 -- ----------------------------------------------------------------
@@ -158,6 +176,36 @@ approxEqQuat :: Quaternion -> Quaternion -> Bool
 approxEqQuat (Quaternion w1 (V3 x1 y1 z1)) (Quaternion w2 (V3 x2 y2 z2)) =
   let d = abs (w1 * w2 + x1 * x2 + y1 * y2 + z1 * z2)
    in d > 0.999
+
+-- | Approximate M44 equality.
+approxEqM44 :: M44 -> M44 -> Bool
+approxEqM44 (M44 (V4 a00 a10 a20 a30) (V4 a01 a11 a21 a31) (V4 a02 a12 a22 a32) (V4 a03 a13 a23 a33)) (M44 (V4 b00 b10 b20 b30) (V4 b01 b11 b21 b31) (V4 b02 b12 b22 b32) (V4 b03 b13 b23 b33)) =
+  all
+    (uncurry approxEq)
+    [ (a00, b00),
+      (a10, b10),
+      (a20, b20),
+      (a30, b30),
+      (a01, b01),
+      (a11, b11),
+      (a21, b21),
+      (a31, b31),
+      (a02, b02),
+      (a12, b12),
+      (a22, b22),
+      (a32, b32),
+      (a03, b03),
+      (a13, b13),
+      (a23, b23),
+      (a33, b33)
+    ]
+
+-- | Approximate Transform equality.
+approxEqTransform :: Transform -> Transform -> Bool
+approxEqTransform a b =
+  approxEqV3 (transformPosition a) (transformPosition b)
+    && approxEqQuat (transformRotation a) (transformRotation b)
+    && approxEqV3 (transformScale a) (transformScale b)
 
 -- | Approximate pose equality.
 approxEqPose :: Pose -> Pose -> Bool
@@ -2140,4 +2188,195 @@ importTests =
                 ]
             result = parseManyOBJ objStr
          in length result == 2
+  ]
+
+-- ----------------------------------------------------------------
+-- Texture
+-- ----------------------------------------------------------------
+
+textureTests :: [TestTree]
+textureTests =
+  [ QC.testProperty "calcMipLevels 1x1 = 1" $
+      once $
+        calcMipLevels 1 1 == 1,
+    QC.testProperty "calcMipLevels 0 dimension = 1" $
+      once $
+        calcMipLevels 0 100 == 1
+          && calcMipLevels 100 0 == 1,
+    QC.testProperty "calcMipLevels power-of-two" $ \(Positive n') ->
+      let n = (n' :: Int) `mod` 13 + 1
+          s = (1 :: Word32) `shiftL` n
+       in calcMipLevels s s == fromIntegral n + 1,
+    QC.testProperty "calcMipLevels >= 1" $ \(Positive w) (Positive h) ->
+      let w' = min (w :: Word32) 8192
+          h' = min h 8192
+       in calcMipLevels w' h' >= 1,
+    QC.testProperty "calcMipLevels monotonic in width" $
+      \(Positive w) (Positive h) ->
+        let w' = min (w :: Word32) 4096
+            h' = min h 4096
+         in calcMipLevels (w' * 2) h' >= calcMipLevels w' h',
+    QC.testProperty "calcMipLevels monotonic in height" $
+      \(Positive w) (Positive h) ->
+        let w' = min (w :: Word32) 4096
+            h' = min h 4096
+         in calcMipLevels w' (h' * 2) >= calcMipLevels w' h',
+    QC.testProperty "calcMipLevels 256x256 = 9" $
+      once $
+        calcMipLevels 256 256 == 9,
+    QC.testProperty "calcMipLevels asymmetric uses max dimension" $
+      \(Positive w) (Positive h) ->
+        let w' = min (w :: Word32) 4096
+            h' = min h 4096
+         in calcMipLevels w' h' == calcMipLevels (max w' h') (max w' h')
+  ]
+
+-- ----------------------------------------------------------------
+-- Scene
+-- ----------------------------------------------------------------
+
+sceneTests :: [TestTree]
+sceneTests =
+  [ QC.testProperty "identityTransform is identity under composition" $
+      \(Positive px) (Positive py) (Positive pz) ->
+        let t = Transform (V3 px py pz) identityQuat (V3 1 1 1)
+         in approxEqTransform (composeTransform identityTransform t) t
+              && approxEqTransform (composeTransform t identityTransform) t,
+    QC.testProperty "composeTransform is associative" $
+      once $
+        let a = Transform (V3 1 0 0) identityQuat (V3 1 1 1)
+            b = Transform (V3 0 2 0) identityQuat (V3 1 1 1)
+            c = Transform (V3 0 0 3) identityQuat (V3 1 1 1)
+            ab_c = composeTransform (composeTransform a b) c
+            a_bc = composeTransform a (composeTransform b c)
+         in approxEqTransform ab_c a_bc,
+    QC.testProperty "transformToM44 matches T*R*S" $
+      once $
+        let t = Transform (V3 1 2 3) (axisAngle (V3 0 1 0) 0.5) (V3 2 2 2)
+            m = transformToM44 t
+            expected =
+              translation (V3 1 2 3)
+                `mulM44` rotation (axisAngle (V3 0 1 0) 0.5)
+                `mulM44` scaling (V3 2 2 2)
+         in approxEqM44 m expected,
+    QC.testProperty "emptyScene has one node" $
+      once $
+        sceneNodeCount emptyScene == 1,
+    QC.testProperty "addNode increments node count" $
+      once $
+        let (_, scene1) = addNode (sceneRoot emptyScene) identityTransform emptyScene
+         in sceneNodeCount scene1 == 2,
+    QC.testProperty "addNode to invalid parent returns -1" $
+      once $
+        fst (addNode 999 identityTransform emptyScene) == -1,
+    QC.testProperty "removeNode removes descendants" $
+      once $
+        let (childId, scene1) =
+              addNode (sceneRoot emptyScene) identityTransform emptyScene
+            (_, scene2) = addNode childId identityTransform scene1
+            scene3 = removeNode childId scene2
+         in sceneNodeCount scene3 == 1,
+    QC.testProperty "removeNode cannot remove root" $
+      once $
+        let scene' = removeNode (sceneRoot emptyScene) emptyScene
+         in sceneNodeCount scene' == 1,
+    QC.testProperty "reparent preserves node transform" $
+      once $
+        let t = Transform (V3 5 0 0) identityQuat (V3 1 1 1)
+            (childA, scene1) = addNode 0 t emptyScene
+            (childB, scene2) = addNode 0 identityTransform scene1
+            scene3 = reparent childA childB scene2
+         in getTransform childA scene3 == Just t,
+    QC.testProperty "reparent prevents cycles" $
+      once $
+        let (childId, scene1) = addNode 0 identityTransform emptyScene
+            (grandchildId, scene2) = addNode childId identityTransform scene1
+            scene3 = reparent childId grandchildId scene2
+         in sceneNodeCount scene3 == sceneNodeCount scene2,
+    QC.testProperty "worldTransforms root = root local" $
+      once $
+        let t = Transform (V3 1 2 3) identityQuat (V3 1 1 1)
+            scene' = setTransform 0 t emptyScene
+            wt = worldTransforms scene'
+         in case IntMap.lookup 0 wt of
+              Just w -> approxEqTransform w t
+              Nothing -> False,
+    QC.testProperty "worldTransforms child = parent * child" $
+      once $
+        let parentT = Transform (V3 10 0 0) identityQuat (V3 1 1 1)
+            childT = Transform (V3 0 5 0) identityQuat (V3 1 1 1)
+            scene0 = setTransform 0 parentT emptyScene
+            (childId, scene1) = addNode 0 childT scene0
+            wt = worldTransforms scene1
+         in case IntMap.lookup childId wt of
+              Just w ->
+                approxEqV3 (transformPosition w) (V3 10 5 0)
+              Nothing -> False,
+    QC.testProperty "worldMatrices matches transformToM44 of worldTransforms" $
+      once $
+        let parentT = Transform (V3 1 0 0) (axisAngle (V3 0 1 0) 0.3) (V3 2 2 2)
+            childT = Transform (V3 0 1 0) identityQuat (V3 1 1 1)
+            scene0 = setTransform 0 parentT emptyScene
+            (childId, scene1) = addNode 0 childT scene0
+            wts = worldTransforms scene1
+            wms = worldMatrices scene1
+         in case (IntMap.lookup childId wts, IntMap.lookup childId wms) of
+              (Just wt, Just wm) -> approxEqM44 (transformToM44 wt) wm
+              _ -> False,
+    QC.testProperty "worldTransformOf matches worldTransforms" $
+      once $
+        let parentT = Transform (V3 3 0 0) identityQuat (V3 1 1 1)
+            childT = Transform (V3 0 4 0) identityQuat (V3 1 1 1)
+            scene0 = setTransform 0 parentT emptyScene
+            (childId, scene1) = addNode 0 childT scene0
+            wt = worldTransforms scene1
+         in case (IntMap.lookup childId wt, worldTransformOf childId scene1) of
+              (Just a, Just b) -> approxEqTransform a b
+              _ -> False
+  ]
+
+-- ----------------------------------------------------------------
+-- Camera
+-- ----------------------------------------------------------------
+
+cameraTests :: [TestTree]
+cameraTests =
+  [ QC.testProperty "viewMatrix at origin looking -Z ≈ identity" $
+      once $
+        let cam = defaultCamera (pi / 4) (16.0 / 9.0)
+            vm = viewMatrix cam
+         in approxEqM44 vm identity,
+    QC.testProperty "lookAtCamera viewMatrix ≈ lookAt" $
+      once $
+        let eye = V3 0 3 10
+            target = V3 0 0 0
+            up = V3 0 1 0
+            cam = lookAtCamera eye target up (Perspective (pi / 4) 1.0 0.1 100.0)
+            vm = viewMatrix cam
+            expected = lookAt eye target up
+         in approxEqM44 vm expected,
+    QC.testProperty "viewProjectionMatrix = projection * view" $
+      once $
+        let cam =
+              lookAtCamera
+                (V3 5 5 5)
+                (V3 0 0 0)
+                (V3 0 1 0)
+                (Perspective (pi / 3) (4.0 / 3.0) 0.1 500.0)
+            vp = viewProjectionMatrix cam
+            expected = projectionMatrix cam `mulM44` viewMatrix cam
+         in approxEqM44 vp expected,
+    QC.testProperty "defaultCamera produces valid matrices" $
+      once $
+        let cam = defaultCamera (pi / 4) (16.0 / 9.0)
+            M44 (V4 a _ _ _) _ _ _ = viewProjectionMatrix cam
+         in not (isNaN a) && not (isInfinite a),
+    QC.testProperty "perspective projection matches Math.Matrix" $
+      once $
+        let cam = Camera vzero identityQuat (Perspective 1.0 1.5 0.1 100.0)
+         in approxEqM44 (projectionMatrix cam) (perspective 1.0 1.5 0.1 100.0),
+    QC.testProperty "ortho projection matches Math.Matrix" $
+      once $
+        let cam = Camera vzero identityQuat (Orthographic (-10) 10 (-10) 10 0.1 100.0)
+         in approxEqM44 (projectionMatrix cam) (ortho (-10) 10 (-10) 10 0.1 100.0)
   ]
