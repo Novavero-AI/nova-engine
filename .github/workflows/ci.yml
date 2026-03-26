@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 # ---------------------------------------------------------------------------
-# Lint jobs (fast, Linux-only)
+# Lint jobs (fast, Linux-only, all run in parallel)
 # ---------------------------------------------------------------------------
 
 jobs:
@@ -40,10 +40,6 @@ jobs:
             src/**/*.hs
             test/**/*.hs
 
-  # ---------------------------------------------------------------------------
-  # C99 strict check (standalone, no Haskell toolchain needed)
-  # ---------------------------------------------------------------------------
-
   c-check:
     name: C99 Strict
     runs-on: ubuntu-latest
@@ -53,20 +49,29 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libvulkan-dev libsdl2-dev pkg-config
-          # SDL3 may not be in default repos — install headers manually
-          # if libsdl3-dev is unavailable. For now, check C syntax only.
+          sudo apt-get install -y -qq libvulkan-dev pkg-config cmake ninja-build
+
+          # SDL3: build from source (not in Ubuntu repos yet)
+          if ! pkg-config --exists sdl3 2>/dev/null; then
+            git clone --depth 1 --branch release-3.2.8 \
+              https://github.com/libsdl-org/SDL.git /tmp/SDL3
+            cmake -S /tmp/SDL3 -B /tmp/SDL3/build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DSDL_SHARED=ON -DSDL_STATIC=OFF \
+              -DSDL_TEST=OFF -DSDL_EXAMPLES=OFF
+            cmake --build /tmp/SDL3/build
+            sudo cmake --install /tmp/SDL3/build
+            sudo ldconfig
+          fi
 
       - name: Compile C99 sources (syntax + warnings)
         run: |
-          # Verify every .c file compiles under C99 strict mode.
-          # Uses -fsyntax-only so we don't need to link.
           for f in cbits/nv_*.c; do
             echo "checking $f"
             cc -std=c99 -Wall -Wextra -Wpedantic -Werror -fsyntax-only \
               -I cbits \
-              $(pkg-config --cflags vulkan 2>/dev/null || echo "-I/usr/include") \
-              $(pkg-config --cflags sdl3 2>/dev/null || echo "") \
+              $(pkg-config --cflags vulkan) \
+              $(pkg-config --cflags sdl3) \
               "$f"
           done
 
@@ -74,7 +79,7 @@ jobs:
         run: |
           c++ -std=c++14 -fsyntax-only -w \
             -I cbits \
-            $(pkg-config --cflags vulkan 2>/dev/null || echo "-I/usr/include") \
+            $(pkg-config --cflags vulkan) \
             cbits/nv_vma.cpp
 
   # ---------------------------------------------------------------------------
@@ -83,7 +88,7 @@ jobs:
 
   cabal-check:
     name: Cabal Check
-    needs: [lint, format]
+    needs: [lint, format, c-check]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -99,7 +104,7 @@ jobs:
 
   build:
     name: Build (${{ matrix.name }})
-    needs: [lint, format, cabal-check]
+    needs: [lint, format, c-check, cabal-check]
     timeout-minutes: 60
     strategy:
       fail-fast: false
