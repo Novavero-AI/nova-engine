@@ -18,6 +18,7 @@ import NovaEngine.Animation.Skeleton
 import NovaEngine.Animation.Skin
 import NovaEngine.Math.Matrix
   ( identity,
+    inverse,
     lookAt,
     mulM44,
     ortho,
@@ -55,6 +56,7 @@ import NovaEngine.SDF.DualContour
 import NovaEngine.SDF.Isosurface
 import NovaEngine.Scene
 import NovaEngine.Scene.Camera
+import NovaEngine.Scene.Shadow
 import NovaEngine.Spatial.Raycast
 import NovaEngine.Terrain
 import NovaEngine.Terrain.Scatter
@@ -104,7 +106,8 @@ tests =
       testGroup "Texture" textureTests,
       testGroup "Scene" sceneTests,
       testGroup "Camera" cameraTests,
-      testGroup "Material" materialTests
+      testGroup "Material" materialTests,
+      testGroup "ShadowCascade" shadowCascadeTests
     ]
 
 -- ----------------------------------------------------------------
@@ -2425,4 +2428,82 @@ materialTests =
               && packed !! 5 == eg
               && packed !! 6 == eb
               && packed !! 7 == ei
+  ]
+
+-- ----------------------------------------------------------------
+-- Shadow cascade
+-- ----------------------------------------------------------------
+
+shadowCascadeTests :: [TestTree]
+shadowCascadeTests =
+  [ QC.testProperty "splits are monotonically increasing" $
+      once $
+        let V4 s0 s1 s2 s3 = cascadeSplitDistances 0.1 100.0 0.5
+         in s0 < s1 && s1 < s2 && s2 < s3,
+    QC.testProperty "splits: first > near, last = far" $
+      once $
+        let near = 0.1
+            far = 100.0
+            V4 s0 _ _ s3 = cascadeSplitDistances near far 0.5
+         in s0 > near && approxEq s3 far,
+    QC.testProperty "lambda=0 gives linear splits" $
+      once $
+        let near = 1.0
+            far = 101.0
+            V4 s0 s1 s2 s3 = cascadeSplitDistances near far 0.0
+         in approxEq s0 26.0
+              && approxEq s1 51.0
+              && approxEq s2 76.0
+              && approxEq s3 101.0,
+    QC.testProperty "lambda=1 gives logarithmic splits" $
+      once $
+        let near = 1.0
+            far = 10000.0
+            V4 s0 s1 s2 s3 = cascadeSplitDistances near far 1.0
+         in approxEq s0 10.0
+              && approxEq s1 100.0
+              && approxEq s2 1000.0
+              && approxEq s3 10000.0,
+    QC.testProperty "frustum corners produces 8 points" $
+      once $
+        let vp = perspective (pi / 4) 1.0 0.1 100.0 `mulM44` identity
+            invVP = inverse vp
+            corners = frustumCornersWorld invVP 0.0 1.0
+         in length corners == 8,
+    QC.testProperty "frustum corners near plane z ≈ -near" $
+      once $
+        let near = 0.1
+            far = 100.0
+            proj = perspective (pi / 4) 1.0 near far
+            invVP = inverse proj
+            corners = frustumCornersWorld invVP 0.0 1.0
+            nearCorners = take 4 corners
+            allNearZ = all (\(V3 _ _ z) -> approxEq (abs z) near) nearCorners
+         in allNearZ,
+    QC.testProperty "computeCascades produces 4 valid matrices" $
+      once $
+        let cfg = defaultShadowConfig
+            viewMat = lookAt (V3 0 5 10) (V3 0 0 0) (V3 0 1 0)
+            projMat = perspective (pi / 4) (16.0 / 9.0) 0.1 100.0
+            lightDir = V3 0.5 1.0 0.3
+            cascades = computeCascades cfg viewMat projMat lightDir 0.1 100.0
+            M44 (V4 a _ _ _) _ _ _ = cascadeMatrix0 cascades
+            M44 (V4 b _ _ _) _ _ _ = cascadeMatrix1 cascades
+            M44 (V4 c _ _ _) _ _ _ = cascadeMatrix2 cascades
+            M44 (V4 d _ _ _) _ _ _ = cascadeMatrix3 cascades
+         in not (isNaN a) && not (isNaN b) && not (isNaN c) && not (isNaN d),
+    QC.testProperty "cascade split distances match config" $
+      once $
+        let cfg = defaultShadowConfig {shadowSplitLambda = 0.5}
+            viewMat = lookAt (V3 0 5 10) (V3 0 0 0) (V3 0 1 0)
+            projMat = perspective (pi / 4) 1.0 0.1 100.0
+            cascades = computeCascades cfg viewMat projMat (V3 0 1 0) 0.1 100.0
+            expected = cascadeSplitDistances 0.1 100.0 0.5
+         in cascadeSplits cascades == expected,
+    QC.testProperty "defaultShadowConfig has resolution 2048" $
+      once $
+        shadowMapResolution defaultShadowConfig == 2048,
+    QC.testProperty "defaultShadowConfig has lambda 0.5" $
+      once $
+        approxEq (shadowSplitLambda defaultShadowConfig) 0.5
   ]

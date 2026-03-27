@@ -49,6 +49,11 @@ NvBuffer *nv_buffer_create_index(NvDevice *dev, NvAllocator *alloc,
  * Returns NULL on failure. */
 NvBuffer *nv_buffer_create_host(NvAllocator *alloc, uint32_t byte_size);
 
+/* Create a host-visible storage buffer (SSBO, for bone matrices etc).
+ * Returns NULL on failure. */
+NvBuffer *nv_buffer_create_host_storage(NvAllocator *alloc,
+                                         uint32_t byte_size);
+
 /* Destroy the buffer and free its allocation. */
 void nv_buffer_destroy(NvBuffer *buf);
 

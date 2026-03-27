@@ -1,0 +1,44 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+/* Push constants: blend weights + vertex count */
+layout(push_constant) uniform PushConstants {
+    vec4  weights;      /* up to 4 morph target weights */
+    uint  vertexCount;
+    uint  targetCount;  /* active targets (1..4) */
+    float _pad0;
+    float _pad1;
+} pc;
+
+/* Base mesh positions (read-only) */
+layout(set = 0, binding = 0) readonly buffer BasePositions {
+    vec4 data[];
+} basePos;
+
+/* Morph target deltas (read-only, interleaved:
+ * target0[0], target1[0], ..., target0[1], target1[1], ... ) */
+layout(set = 0, binding = 1) readonly buffer MorphDeltas {
+    vec4 data[];
+} deltas;
+
+/* Output positions (write) */
+layout(set = 0, binding = 2) writeonly buffer OutputPositions {
+    vec4 data[];
+} outPos;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= pc.vertexCount) return;
+
+    vec4 pos = basePos.data[idx];
+
+    /* Accumulate weighted deltas */
+    for (uint t = 0; t < pc.targetCount; t++) {
+        uint deltaIdx = idx * pc.targetCount + t;
+        float w = pc.weights[t];
+        pos += w * deltas.data[deltaIdx];
+    }
+
+    outPos.data[idx] = pos;
+}

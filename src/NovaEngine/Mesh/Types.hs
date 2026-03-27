@@ -73,6 +73,7 @@ module NovaEngine.Mesh.Types
 where
 
 import Data.List (foldl')
+import Foreign.Storable (Storable (..))
 import NovaEngine.Math.Quaternion
   ( axisAngle,
     identityQuat,
@@ -197,6 +198,27 @@ rootParent = -1
 -- | Clamp a value to a range.
 clampF :: Float -> Float -> Float -> Float
 clampF lo hi x = max lo (min hi x)
+
+-- ----------------------------------------------------------------
+-- Storable Vertex
+-- ----------------------------------------------------------------
+
+instance Storable Vertex where
+  sizeOf _ = 64
+  alignment _ = 4
+  peek p = do
+    pos <- peekByteOff p 0
+    nrm <- peekByteOff p 12
+    uv <- peekByteOff p 24
+    tang <- peekByteOff p 32
+    col <- peekByteOff p 48
+    pure (Vertex pos nrm uv tang col)
+  poke p (Vertex pos nrm uv tang col) = do
+    pokeByteOff p 0 pos
+    pokeByteOff p 12 nrm
+    pokeByteOff p 24 uv
+    pokeByteOff p 32 tang
+    pokeByteOff p 48 col
 
 -- | Group a flat index list into triples representing triangles.
 groupTriangles :: [Word32] -> [(Word32, Word32, Word32)]

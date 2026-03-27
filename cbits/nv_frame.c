@@ -94,8 +94,8 @@ void nv_frame_destroy(NvFrame *fr) {
  * Frame bracket
  * ---------------------------------------------------------------- */
 
-int nv_frame_begin(NvFrame *fr, NvSwapchain *sc, NvPipeline *pip) {
-    if (!fr || !sc || !pip) {
+int nv_frame_acquire(NvFrame *fr, NvSwapchain *sc) {
+    if (!fr || !sc) {
         return -1;
     }
 
@@ -119,7 +119,7 @@ int nv_frame_begin(NvFrame *fr, NvSwapchain *sc, NvPipeline *pip) {
 
     vkResetFences(fr->device, 1, &fr->in_flight[f]);
 
-    /* Record commands */
+    /* Begin command recording */
     VkCommandBuffer cmd = fr->cmd[f];
     vkResetCommandBuffer(cmd, 0);
 
@@ -128,7 +128,13 @@ int nv_frame_begin(NvFrame *fr, NvSwapchain *sc, NvPipeline *pip) {
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     vkBeginCommandBuffer(cmd, &begin);
 
-    /* Begin render pass */
+    return 1;
+}
+
+void nv_frame_begin_render_pass(NvFrame *fr, NvSwapchain *sc,
+                                NvPipeline *pip) {
+    VkCommandBuffer cmd = fr->cmd[fr->current_frame];
+
     VkClearValue clears[2];
     memset(clears, 0, sizeof(clears));
     clears[0].color.float32[0] = 0.01f;
@@ -164,7 +170,19 @@ int nv_frame_begin(NvFrame *fr, NvSwapchain *sc, NvPipeline *pip) {
     memset(&scissor, 0, sizeof(scissor));
     scissor.extent = sc->extent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
+}
 
+int nv_frame_begin(NvFrame *fr, NvSwapchain *sc, NvPipeline *pip) {
+    if (!fr || !sc || !pip) {
+        return -1;
+    }
+
+    int result = nv_frame_acquire(fr, sc);
+    if (result != 1) {
+        return result;
+    }
+
+    nv_frame_begin_render_pass(fr, sc, pip);
     return 1;
 }
 
@@ -229,16 +247,75 @@ int nv_frame_end(NvFrame *fr, NvSwapchain *sc) {
     return 1;
 }
 
+int nv_frame_submit(NvFrame *fr, NvSwapchain *sc) {
+    if (!fr || !sc) {
+        return -1;
+    }
+
+    uint32_t        f   = fr->current_frame;
+    VkCommandBuffer cmd = fr->cmd[f];
+
+    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
+        return -1;
+    }
+
+    VkSemaphore wait_sems[]   = {fr->image_available[f]};
+    VkSemaphore signal_sems[] = {fr->render_finished[f]};
+    VkPipelineStageFlags wait_stages[] = {
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+
+    VkSubmitInfo submit;
+    memset(&submit, 0, sizeof(submit));
+    submit.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit.waitSemaphoreCount   = 1;
+    submit.pWaitSemaphores      = wait_sems;
+    submit.pWaitDstStageMask    = wait_stages;
+    submit.commandBufferCount   = 1;
+    submit.pCommandBuffers      = &cmd;
+    submit.signalSemaphoreCount = 1;
+    submit.pSignalSemaphores    = signal_sems;
+
+    if (vkQueueSubmit(fr->graphics_queue, 1, &submit,
+                      fr->in_flight[f])
+        != VK_SUCCESS) {
+        return -1;
+    }
+
+    VkPresentInfoKHR present;
+    memset(&present, 0, sizeof(present));
+    present.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present.waitSemaphoreCount = 1;
+    present.pWaitSemaphores    = signal_sems;
+    present.swapchainCount     = 1;
+    present.pSwapchains        = &sc->handle;
+    present.pImageIndices      = &fr->image_index;
+
+    VkResult res = vkQueuePresentKHR(fr->present_queue, &present);
+
+    fr->current_frame =
+        (fr->current_frame + 1) % NV_MAX_FRAMES_IN_FLIGHT;
+
+    if (res == VK_ERROR_OUT_OF_DATE_KHR
+        || res == VK_SUBOPTIMAL_KHR) {
+        return 0;
+    }
+    if (res != VK_SUCCESS) {
+        return -1;
+    }
+    return 1;
+}
+
 /* ----------------------------------------------------------------
  * Draw commands
  * ---------------------------------------------------------------- */
 
 void nv_frame_push_constants(NvFrame *fr, NvPipeline *pip,
-                             const void *data, uint32_t size) {
+                             const void *data, uint32_t offset,
+                             uint32_t size) {
     vkCmdPushConstants(fr->cmd[fr->current_frame], pip->layout,
                        VK_SHADER_STAGE_VERTEX_BIT
                            | VK_SHADER_STAGE_FRAGMENT_BIT,
-                       0, size, data);
+                       offset, size, data);
 }
 
 void nv_frame_bind_vertex_buffer(NvFrame *fr, NvBuffer *buf) {

@@ -26,15 +26,23 @@ module NovaEngine.Render.Frame
 
     -- * Frame bracket
     frameBegin,
+    frameAcquire,
+    frameBeginRenderPass,
     frameEnd,
+    frameSubmit,
 
     -- * Draw commands
     framePushMVP,
+    framePushConstants,
+    framePushMaterial,
     frameBindVertexBuffer,
     frameBindIndexBuffer,
     frameDrawIndexed,
     frameDraw,
     frameBindDescriptorSet,
+
+    -- * Internal (for other Render modules)
+    withFramePtr,
   )
 where
 
@@ -48,9 +56,11 @@ import Foreign.ForeignPtr
   )
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (FunPtr, Ptr, castPtr, nullPtr)
+import Foreign.Storable (Storable, sizeOf)
 import NovaEngine.Math.Types (M44)
 import NovaEngine.Render.Buffer (Buffer, withBufferPtr)
 import NovaEngine.Render.Device (Device, withDevicePtr)
+import NovaEngine.Render.Material (MaterialParams)
 import NovaEngine.Render.Pipeline (Pipeline, withPipelinePtr)
 import NovaEngine.Render.Swapchain (Swapchain, withSwapchainPtr)
 
@@ -85,12 +95,21 @@ foreign import ccall unsafe "&nv_frame_destroy"
 foreign import ccall unsafe "nv_frame_begin"
   c_nv_frame_begin :: Ptr () -> Ptr () -> Ptr () -> IO CInt
 
+foreign import ccall unsafe "nv_frame_acquire"
+  c_nv_frame_acquire :: Ptr () -> Ptr () -> IO CInt
+
+foreign import ccall unsafe "nv_frame_begin_render_pass"
+  c_nv_frame_begin_render_pass :: Ptr () -> Ptr () -> Ptr () -> IO ()
+
 foreign import ccall unsafe "nv_frame_end"
   c_nv_frame_end :: Ptr () -> Ptr () -> IO CInt
 
+foreign import ccall unsafe "nv_frame_submit"
+  c_nv_frame_submit :: Ptr () -> Ptr () -> IO CInt
+
 foreign import ccall unsafe "nv_frame_push_constants"
   c_nv_frame_push_constants ::
-    Ptr () -> Ptr () -> Ptr () -> Word32 -> IO ()
+    Ptr () -> Ptr () -> Ptr () -> Word32 -> Word32 -> IO ()
 
 foreign import ccall unsafe "nv_frame_bind_vertex_buffer"
   c_nv_frame_bind_vertex_buffer :: Ptr () -> Ptr () -> IO ()
@@ -144,6 +163,22 @@ frameBegin (Frame fptr) sc pip =
       withPipelinePtr pip $
         fmap toResult . c_nv_frame_begin frPtr scPtr
 
+-- | Acquire the next image and begin command recording (no render
+-- pass).  Use when recording shadow passes before the main pass.
+frameAcquire :: Frame -> Swapchain -> IO FrameResult
+frameAcquire (Frame fptr) sc =
+  withForeignPtr fptr $ \frPtr ->
+    withSwapchainPtr sc $
+      fmap toResult . c_nv_frame_acquire frPtr
+
+-- | Begin the main render pass after shadow pass recording.
+frameBeginRenderPass :: Frame -> Swapchain -> Pipeline -> IO ()
+frameBeginRenderPass (Frame fptr) sc pip =
+  withForeignPtr fptr $ \frPtr ->
+    withSwapchainPtr sc $ \scPtr ->
+      withPipelinePtr pip $
+        c_nv_frame_begin_render_pass frPtr scPtr
+
 -- | End a frame: end render pass, submit, present.
 frameEnd :: Frame -> Swapchain -> IO FrameResult
 frameEnd (Frame fptr) sc =
@@ -151,17 +186,48 @@ frameEnd (Frame fptr) sc =
     withSwapchainPtr sc $
       fmap toResult . c_nv_frame_end frPtr
 
+-- | Submit and present without ending any render pass.
+-- Use when the last render pass was already ended (e.g. by
+-- 'postProcessRecord').
+frameSubmit :: Frame -> Swapchain -> IO FrameResult
+frameSubmit (Frame fptr) sc =
+  withForeignPtr fptr $ \frPtr ->
+    withSwapchainPtr sc $
+      fmap toResult . c_nv_frame_submit frPtr
+
 -- ----------------------------------------------------------------
 -- Draw commands (call between frameBegin and frameEnd)
 -- ----------------------------------------------------------------
 
--- | Push an MVP matrix to the vertex shader via push constants.
+-- | Push an MVP matrix to the vertex shader via push constants
+-- (offset 0, 64 bytes).
 framePushMVP :: Frame -> Pipeline -> M44 -> IO ()
 framePushMVP (Frame fptr) pip mvp =
   withForeignPtr fptr $ \frPtr ->
     withPipelinePtr pip $ \pipPtr ->
       with mvp $ \mvpPtr ->
-        c_nv_frame_push_constants frPtr pipPtr (castPtr mvpPtr) 64
+        c_nv_frame_push_constants frPtr pipPtr (castPtr mvpPtr) 0 64
+
+-- | Push arbitrary data to the shader via push constants.
+--
+-- @offset@ is in bytes.  The caller must ensure the 'Storable'
+-- value matches the push constant layout at that offset.
+framePushConstants ::
+  (Storable a) => Frame -> Pipeline -> Word32 -> a -> IO ()
+framePushConstants (Frame fptr) pip offset val =
+  withForeignPtr fptr $ \frPtr ->
+    withPipelinePtr pip $ \pipPtr ->
+      with val $ \valPtr ->
+        c_nv_frame_push_constants
+          frPtr
+          pipPtr
+          (castPtr valPtr)
+          offset
+          (fromIntegral (sizeOf val))
+
+-- | Push material parameters at offset 64 (after the model matrix).
+framePushMaterial :: Frame -> Pipeline -> MaterialParams -> IO ()
+framePushMaterial fr pip = framePushConstants fr pip 64
 
 -- | Bind a vertex buffer at binding 0.
 frameBindVertexBuffer :: Frame -> Buffer -> IO ()
@@ -198,3 +264,11 @@ frameBindDescriptorSet (Frame fptr) pip setIndex descriptorSet =
   withForeignPtr fptr $ \frPtr ->
     withPipelinePtr pip $ \pipPtr ->
       c_nv_frame_bind_descriptor_set frPtr pipPtr setIndex descriptorSet
+
+-- ----------------------------------------------------------------
+-- Internal
+-- ----------------------------------------------------------------
+
+-- | Run an action with the raw C pointer to the frame.
+withFramePtr :: Frame -> (Ptr () -> IO a) -> IO a
+withFramePtr (Frame fptr) = withForeignPtr fptr

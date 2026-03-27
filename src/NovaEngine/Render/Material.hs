@@ -30,6 +30,8 @@ module NovaEngine.Render.Material
 where
 
 import Data.Word (Word8)
+import Foreign.Ptr (Ptr, castPtr)
+import Foreign.Storable (Storable (..), peekElemOff, pokeElemOff)
 import NovaEngine.Math.Types (V2 (..), V4 (..))
 import NovaEngine.Render.Allocator (Allocator)
 import NovaEngine.Render.Device (Device)
@@ -112,6 +114,43 @@ packParams p =
         ou,
         ov
       ]
+
+-- ----------------------------------------------------------------
+-- Storable MaterialParams
+-- ----------------------------------------------------------------
+
+instance Storable MaterialParams where
+  sizeOf _ = 64
+  alignment _ = 4
+  peek p = do
+    albedo <- peekByteOff p 0
+    emissive <- peekByteOff p 16
+    let fp = castPtr p :: Ptr Float
+    met <- peekElemOff fp 8
+    rough <- peekElemOff fp 9
+    ao <- peekElemOff fp 10
+    uvS <- peekByteOff p 48
+    uvO <- peekByteOff p 56
+    pure
+      MaterialParams
+        { paramMetallic = met,
+          paramRoughness = rough,
+          paramAOStrength = ao,
+          paramAlbedoFactor = albedo,
+          paramEmissiveFactor = emissive,
+          paramUVScale = uvS,
+          paramUVOffset = uvO
+        }
+  poke p mp = do
+    let fp = castPtr p :: Ptr Float
+    pokeByteOff p 0 (paramAlbedoFactor mp)
+    pokeByteOff p 16 (paramEmissiveFactor mp)
+    pokeElemOff fp 8 (paramMetallic mp)
+    pokeElemOff fp 9 (paramRoughness mp)
+    pokeElemOff fp 10 (paramAOStrength mp)
+    pokeElemOff fp 11 (0.0 :: Float)
+    pokeByteOff p 48 (paramUVScale mp)
+    pokeByteOff p 56 (paramUVOffset mp)
 
 -- ----------------------------------------------------------------
 -- Material

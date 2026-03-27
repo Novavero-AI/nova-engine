@@ -82,9 +82,27 @@ library
     NovaEngine.Render.Descriptor
     NovaEngine.Render.Texture
     NovaEngine.Render.Material
+    NovaEngine.Render.Shadow
+    NovaEngine.Render.PostProcess
+    NovaEngine.Render.Skin
+    NovaEngine.Render.SkinPipeline
+    NovaEngine.Render.Compute
+    NovaEngine.Render.Terrain
+    -- Input
+    NovaEngine.Input
+    NovaEngine.Input.ActionMap
+    -- Debug
+    NovaEngine.Debug
+    -- Physics
+    NovaEngine.Physics.GJK
+    NovaEngine.Physics.EPA
+    NovaEngine.Physics.Shapes
+    NovaEngine.Physics.Solver
     -- Scene
     NovaEngine.Scene
     NovaEngine.Scene.Camera
+    NovaEngine.Scene.FrameUBO
+    NovaEngine.Scene.Shadow
 
   c-sources:
     cbits/nv_ffi.c
@@ -99,6 +117,13 @@ library
     cbits/nv_descriptor.c
     cbits/nv_texture.c
     cbits/nv_stb_image.c
+    cbits/nv_shadow.c
+    cbits/nv_postprocess.c
+    cbits/nv_skin_pipeline.c
+    cbits/nv_compute.c
+    cbits/nv_terrain.c
+    cbits/nv_input.c
+    cbits/nv_debug.c
 
   cxx-sources:      cbits/nv_vma.cpp
   cxx-options:      -std=c++14 -w

@@ -12,6 +12,7 @@ module NovaEngine.Render.Buffer
     createVertexBuffer,
     createIndexBuffer,
     createHostBuffer,
+    createHostStorageBuffer,
     destroyBuffer,
 
     -- * Host-visible buffer operations
@@ -57,6 +58,9 @@ foreign import ccall unsafe "nv_buffer_create_index"
 
 foreign import ccall unsafe "nv_buffer_create_host"
   c_nv_buffer_create_host :: Ptr () -> Word32 -> IO (Ptr ())
+
+foreign import ccall unsafe "nv_buffer_create_host_storage"
+  c_nv_buffer_create_host_storage :: Ptr () -> Word32 -> IO (Ptr ())
 
 foreign import ccall unsafe "&nv_buffer_destroy"
   c_nv_buffer_destroy :: FunPtr (Ptr () -> IO ())
@@ -128,6 +132,16 @@ createHostBuffer :: Allocator -> Word32 -> IO (Maybe Buffer)
 createHostBuffer alloc byteSize =
   withAllocatorPtr alloc $ \allocPtr -> do
     ptr <- c_nv_buffer_create_host allocPtr byteSize
+    wrapBuffer ptr
+
+-- | Create a host-visible storage buffer (SSBO).
+--
+-- Use for bone matrices, instance data, or other GPU-readable
+-- arrays updated per frame. Returns 'Nothing' if allocation fails.
+createHostStorageBuffer :: Allocator -> Word32 -> IO (Maybe Buffer)
+createHostStorageBuffer alloc byteSize =
+  withAllocatorPtr alloc $ \allocPtr -> do
+    ptr <- c_nv_buffer_create_host_storage allocPtr byteSize
     wrapBuffer ptr
 
 -- | Destroy the buffer and free GPU memory.

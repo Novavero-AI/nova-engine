@@ -63,17 +63,34 @@ void nv_frame_destroy(NvFrame *fr);
  * Returns 1 OK, 0 swapchain out-of-date, -1 error. */
 int nv_frame_begin(NvFrame *fr, NvSwapchain *sc, NvPipeline *pip);
 
+/* Acquire next image and begin command recording (no render pass).
+ * Use when recording shadow passes before the main render pass.
+ * Returns 1 OK, 0 swapchain out-of-date, -1 error. */
+int nv_frame_acquire(NvFrame *fr, NvSwapchain *sc);
+
+/* Begin the main render pass after shadow pass recording.
+ * Call after nv_frame_acquire + shadow recording. */
+void nv_frame_begin_render_pass(NvFrame *fr, NvSwapchain *sc,
+                                NvPipeline *pip);
+
 /* End a frame: end render pass, submit, present.
  * Returns 1 OK, 0 swapchain out-of-date, -1 error. */
 int nv_frame_end(NvFrame *fr, NvSwapchain *sc);
+
+/* Submit and present without ending any render pass.
+ * Use when the last render pass was already ended (e.g. by
+ * nv_postprocess_record).
+ * Returns 1 OK, 0 swapchain out-of-date, -1 error. */
+int nv_frame_submit(NvFrame *fr, NvSwapchain *sc);
 
 /* ----------------------------------------------------------------
  * Draw commands (call between begin and end)
  * ---------------------------------------------------------------- */
 
-/* Push MVP matrix (or any data) to the vertex stage. */
+/* Push constant data at the given byte offset. */
 void nv_frame_push_constants(NvFrame *fr, NvPipeline *pip,
-                             const void *data, uint32_t size);
+                             const void *data, uint32_t offset,
+                             uint32_t size);
 
 /* Bind a vertex buffer at binding 0. */
 void nv_frame_bind_vertex_buffer(NvFrame *fr, NvBuffer *buf);

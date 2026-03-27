@@ -67,6 +67,17 @@ NvBuffer *nv_buffer_create_host(NvAllocator *alloc,
     return create_from_alloc_buffer(ab);
 }
 
+NvBuffer *nv_buffer_create_host_storage(NvAllocator *alloc,
+                                         uint32_t byte_size) {
+    if (!alloc || byte_size == 0) {
+        return NULL;
+    }
+
+    NvAllocBuffer *ab = nv_alloc_buffer_host(
+        alloc, byte_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    return create_from_alloc_buffer(ab);
+}
+
 void nv_buffer_destroy(NvBuffer *buf) {
     if (!buf) {
         return;

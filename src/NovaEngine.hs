@@ -1,14 +1,20 @@
 -- | nova-engine: 3D graphics engine.
 --
--- C99 Vulkan + SDL2 hot path, Haskell brain.
+-- C99 Vulkan + SDL3 hot path, Haskell brain.
 --
 -- @
--- import NovaEngine            -- everything
--- import NovaEngine.Math       -- vectors, matrices, quaternions
--- import NovaEngine.Mesh       -- geometry generation
--- import NovaEngine.Animation  -- skeletal animation
--- import NovaEngine.Terrain    -- heightmaps, noise
--- import NovaEngine.Render     -- Vulkan + SDL2 rendering (future)
+-- import NovaEngine              -- math re-exports
+-- import NovaEngine.Mesh.*       -- procedural geometry
+-- import NovaEngine.Animation.*  -- skeleton, pose, IK, skinning
+-- import NovaEngine.SDF.*        -- signed distance fields
+-- import NovaEngine.Noise        -- procedural noise
+-- import NovaEngine.Terrain.*    -- heightmaps, erosion, scatter
+-- import NovaEngine.Spatial.*    -- raycast, BVH
+-- import NovaEngine.Scene.*      -- transform graph, camera, shadows
+-- import NovaEngine.Render.*     -- Vulkan rendering (FFI to C99)
+-- import NovaEngine.Input.*      -- SDL3 input, action maps
+-- import NovaEngine.Physics.*    -- GJK, EPA, rigid body solver
+-- import NovaEngine.Debug        -- line rendering, GPU profiling
 -- @
 module NovaEngine
   ( -- * Math

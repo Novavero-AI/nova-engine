@@ -8,6 +8,8 @@ layout(set = 0, binding = 0) uniform FrameUBO {
     vec4 cameraPos;
     vec4 lightDir;
     vec4 lightColor;
+    mat4 cascadeMatrices[4];
+    vec4 cascadeSplits;
 } frame;
 
 layout(push_constant) uniform PushConstants {
@@ -28,6 +30,8 @@ layout(set = 1, binding = 2) uniform sampler2D texMetallicRoughness;
 layout(set = 1, binding = 3) uniform sampler2D texAO;
 layout(set = 1, binding = 4) uniform sampler2D texEmissive;
 
+layout(set = 2, binding = 0) uniform sampler2DArrayShadow shadowMap;
+
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragUV;
@@ -36,6 +40,76 @@ layout(location = 4) in vec3 fragTangent;
 layout(location = 5) in vec3 fragBitangent;
 
 layout(location = 0) out vec4 outColor;
+
+/* ---- Shadow sampling ---- */
+
+float sampleShadow(vec3 worldPos) {
+    /* View-space depth for cascade selection */
+    float viewDepth = -(frame.view * vec4(worldPos, 1.0)).z;
+
+    /* Select cascade */
+    int cascade = 3;
+    for (int i = 0; i < 4; i++) {
+        if (viewDepth < frame.cascadeSplits[i]) {
+            cascade = i;
+            break;
+        }
+    }
+
+    /* Project into light space */
+    vec4 lsPos = frame.cascadeMatrices[cascade] * vec4(worldPos, 1.0);
+    vec3 proj  = lsPos.xyz / lsPos.w;
+
+    /* NDC [-1,1] XY -> UV [0,1] */
+    vec2 shadowUV = proj.xy * 0.5 + 0.5;
+    float depth   = proj.z;
+
+    /* Out-of-bounds: fully lit */
+    if (shadowUV.x < 0.0 || shadowUV.x > 1.0 ||
+        shadowUV.y < 0.0 || shadowUV.y > 1.0 ||
+        depth > 1.0) {
+        return 1.0;
+    }
+
+    /* PCF 3x3 via hardware comparison sampler */
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0).xy);
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            vec2 offset = vec2(float(x), float(y)) * texelSize;
+            shadow += texture(shadowMap,
+                vec4(shadowUV + offset, float(cascade), depth));
+        }
+    }
+    shadow /= 9.0;
+
+    /* Cascade blending: smooth transition at split boundaries */
+    float splitDist = frame.cascadeSplits[cascade];
+    float blendStart = splitDist * 0.9;
+    if (cascade < 3 && viewDepth > blendStart) {
+        /* Sample next cascade */
+        int next = cascade + 1;
+        vec4 lsNext = frame.cascadeMatrices[next] * vec4(worldPos, 1.0);
+        vec3 projNext = lsNext.xyz / lsNext.w;
+        vec2 uvNext = projNext.xy * 0.5 + 0.5;
+        float depthNext = projNext.z;
+
+        float shadowNext = 0.0;
+        for (int x = -1; x <= 1; x++) {
+            for (int y = -1; y <= 1; y++) {
+                vec2 offset = vec2(float(x), float(y)) * texelSize;
+                shadowNext += texture(shadowMap,
+                    vec4(uvNext + offset, float(next), depthNext));
+            }
+        }
+        shadowNext /= 9.0;
+
+        float blend = smoothstep(blendStart, splitDist, viewDepth);
+        shadow = mix(shadow, shadowNext, blend);
+    }
+
+    return shadow;
+}
 
 /* ---- Cook-Torrance BRDF ---- */
 
@@ -103,7 +177,8 @@ void main() {
 
     float NdotL   = max(dot(N, L), 0.0);
     vec3 radiance = frame.lightColor.rgb * frame.lightColor.a;
-    vec3 Lo       = (kD * albedo.rgb / PI + specular) * radiance * NdotL;
+    float shadow  = sampleShadow(fragWorldPos);
+    vec3 Lo       = (kD * albedo.rgb / PI + specular) * radiance * NdotL * shadow;
 
     /* Ambient (constant for now — IBL in a later phase) */
     vec3 ambient = vec3(0.03) * albedo.rgb * ao;
