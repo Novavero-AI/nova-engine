@@ -103,7 +103,7 @@ epaLoop _ _ faces iter
        in Just (Penetration n d)
 epaLoop supA supB faces iter =
   let -- Find the face closest to the origin
-      closest@(Face fa fb fc fn fd) = closestFace faces
+      (Face fa _ _ fn fd) = closestFace faces
       -- Get a new support point along the closest face's normal
       newPoint = supA fn ^-^ supB (negV fn)
       newDist = dot fn newPoint

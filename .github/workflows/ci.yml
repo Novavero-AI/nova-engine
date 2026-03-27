@@ -173,7 +173,6 @@ jobs:
           Start-Process -Wait -FilePath "$env:TEMP\vulkan-sdk.exe" -ArgumentList "--accept-licenses --default-answer --confirm-command install"
           $env:VULKAN_SDK = "C:\VulkanSDK\$VK_VERSION"
           echo "VULKAN_SDK=$env:VULKAN_SDK" >> $env:GITHUB_ENV
-          echo "PKG_CONFIG_PATH=$env:VULKAN_SDK\Lib\pkgconfig;$env:PKG_CONFIG_PATH" >> $env:GITHUB_ENV
           echo "$env:VULKAN_SDK\Bin" >> $env:GITHUB_PATH
 
           # SDL3 (pre-built dev libs)
@@ -182,10 +181,12 @@ jobs:
           Invoke-WebRequest -Uri $SDL_URL -OutFile "$env:TEMP\sdl3.zip"
           Expand-Archive -Path "$env:TEMP\sdl3.zip" -DestinationPath "$env:TEMP\sdl3"
           $SDL_DIR = "$env:TEMP\sdl3\SDL3-$SDL_VERSION\x86_64-w64-mingw32"
-          echo "PKG_CONFIG_PATH=$SDL_DIR\lib\pkgconfig;$env:PKG_CONFIG_PATH" >> $env:GITHUB_ENV
 
           # pkg-config (via choco)
           choco install pkgconfiglite -y
+
+          # Write combined PKG_CONFIG_PATH once (multiple writes overwrite each other)
+          echo "PKG_CONFIG_PATH=$SDL_DIR\lib\pkgconfig;$env:VULKAN_SDK\Lib\pkgconfig" >> $env:GITHUB_ENV
 
       - uses: haskell-actions/setup@v2
         id: setup-haskell
