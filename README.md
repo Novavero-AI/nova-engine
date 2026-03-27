@@ -18,7 +18,7 @@
 
 A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering, SDL3 windowing, VMA memory management, command recording). Haskell handles the brain (mesh generation, skeletal animation, terrain, frame orchestration). Pure math, zero unnecessary deps.
 
-**48 modules. 255 property tests.**
+**67 modules. 305 property tests.**
 
 ---
 
@@ -41,7 +41,7 @@ A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering
 │  nv_buffer     nv_frame      nv_descriptor  │
 │  nv_texture   nv_shadow     nv_postprocess │
 │  nv_skin_pipeline  nv_compute  nv_terrain  │
-│  nv_input     nv_debug      nv_descriptor  │
+│  nv_input     nv_debug      nv_util        │
 ├─────────────────────────────────────────────┤
 │  Vendored: VMA 3.1.0 (nv_vma.cpp)          │
 └─────────────────────────────────────────────┘
@@ -124,6 +124,37 @@ A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering
 |--------|-------------|
 | `Spatial.Raycast` | Ray-triangle intersection (Moller-Trumbore), BVH-accelerated ray-mesh queries |
 
+### Scene
+
+| Module | Description |
+|--------|-------------|
+| `Scene` | IntMap-based entity storage, transform hierarchy, single-pass world matrix computation |
+| `Scene.Camera` | Perspective/orthographic camera, view and projection matrix computation |
+| `Scene.FrameUBO` | 448-byte GPU-ready per-frame uniform buffer (view, proj, lights, cascades) |
+| `Scene.Shadow` | Cascade split computation, frustum extraction, light-space ortho fitting with texel snapping |
+
+### Physics
+
+| Module | Description |
+|--------|-------------|
+| `Physics.Shapes` | Sphere, box, capsule collision shapes |
+| `Physics.GJK` | GJK collision detection with Minkowski difference support mapping |
+| `Physics.EPA` | Expanding polytope algorithm for penetration depth and contact normal |
+| `Physics.Solver` | Sequential impulse constraint solver, rigid body integration |
+
+### Input
+
+| Module | Description |
+|--------|-------------|
+| `Input` | SDL3 keyboard/mouse state polling, scancode queries |
+| `Input.ActionMap` | Named action bindings (key → action), press/release/hold detection |
+
+### Debug
+
+| Module | Description |
+|--------|-------------|
+| `Debug` | Immediate-mode debug line rendering, box/sphere wireframes, GPU timestamp profiling |
+
 ### Render (C99 Vulkan + SDL3)
 
 | C99 Module | Haskell Wrapper | Description |
@@ -138,14 +169,17 @@ A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering
 | `nv_frame` | `Render.Frame` | 2 frames in flight, semaphores/fences, command recording, descriptor binding |
 | `nv_descriptor` | `Render.Descriptor` | Descriptor set layouts, pools, allocation, buffer/image write helpers |
 | `nv_texture` | `Render.Texture` | stb_image loading, VkImage with mipmaps, samplers, default textures |
-| `nv_material` | `Render.Material` | PBR material (5 texture slots), per-frame UBO, Cook-Torrance BRDF |
+| — | `Render.Material` | PBR material (5 texture slots), `MaterialParams` Storable, default textures |
 | `nv_shadow` | `Render.Shadow` | 4-cascade CSM, depth-only pass, PCF soft shadows |
 | `nv_postprocess` | `Render.PostProcess` | HDR framebuffer, bloom, ACES tonemap, FXAA |
-| `nv_skin_pipeline` | `Render.Skin` | Bone matrix SSBO, vertex shader skinning, 80-byte skinned vertex |
+| `nv_skin_pipeline` | `Render.SkinPipeline` | GPU skinning pipeline, bone SSBO descriptor layout |
+| — | `Render.Skin` | 80-byte `SkinnedVertex`, bone matrix computation, LBS/DQS bridge |
 | `nv_compute` | `Render.Compute` | Compute pipeline, morph target dispatch, pipeline barriers |
 | `nv_terrain` | `Render.Terrain` | Heightmap displacement, splatmap, terrain render pass |
-| `nv_input` | `Render.Input` | SDL3 action mapping, input event dispatch |
-| `nv_debug` | `Render.Debug` | Debug line rendering, GPU timestamp queries |
+| `nv_input` | `Input` | SDL3 keyboard/mouse polling, action mapping |
+| — | `Input.ActionMap` | Configurable input action bindings |
+| `nv_debug` | `Debug` | Debug line rendering, GPU timestamp queries |
+| `nv_util` | — | Shared SPIR-V loader, one-shot command buffers |
 | `nv_vma` | — | C-linkage wrapper around VMA (only C++ in the project) |
 
 **Shaders:** PBR (vertex + fragment), shadow (depth-only), bloom (downsample + upsample), tonemap, terrain (displacement + splatmap), debug (line rendering), compute (morph targets)
