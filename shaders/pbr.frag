@@ -164,7 +164,10 @@ void main() {
     /* Cook-Torrance specular BRDF */
     vec3 F0 = mix(vec3(0.04), albedo.rgb, metallic);
 
-    float D = distributionGGX(N, H, roughness);
+    /* Square roughness for glTF perceptual-roughness convention:
+     * alpha = roughness^2 passed to NDF, giving effective alpha^2 = roughness^4. */
+    float alpha = roughness * roughness;
+    float D = distributionGGX(N, H, alpha);
     float G = geometrySmith(N, V, L, roughness);
     vec3  F = fresnelSchlick(max(dot(H, V), 0.0), F0);
 

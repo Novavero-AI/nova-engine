@@ -4,41 +4,10 @@
 
 #include "nv_postprocess.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* ----------------------------------------------------------------
- * SPIR-V shader loading
- * ---------------------------------------------------------------- */
-
-static VkShaderModule load_shader(VkDevice device, const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) {
-        fprintf(stderr, "[nova] failed to open shader: %s\n", path);
-        return VK_NULL_HANDLE;
-    }
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    uint32_t *code = malloc((size_t)size);
-    if (!code) { fclose(f); return VK_NULL_HANDLE; }
-    if (fread(code, 1, (size_t)size, f) != (size_t)size) {
-        free(code); fclose(f); return VK_NULL_HANDLE;
-    }
-    fclose(f);
-
-    VkShaderModuleCreateInfo info;
-    memset(&info, 0, sizeof(info));
-    info.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    info.codeSize = (size_t)size;
-    info.pCode    = code;
-
-    VkShaderModule mod = VK_NULL_HANDLE;
-    vkCreateShaderModule(device, &info, NULL, &mod);
-    free(code);
-    return mod;
-}
+#include "nv_util.h"
 
 /* ----------------------------------------------------------------
  * HDR image (RGBA16F, full resolution)
@@ -870,10 +839,10 @@ NvPostProcess *nv_postprocess_create(NvDevice *dev,
     pp->swapchain_format = sc->image_format;
 
     /* Load shaders */
-    VkShaderModule vert_mod     = load_shader(pp->device, fullscreen_vert);
-    VkShaderModule down_mod     = load_shader(pp->device, bloom_down_frag);
-    VkShaderModule up_mod       = load_shader(pp->device, bloom_up_frag);
-    VkShaderModule tonemap_mod  = load_shader(pp->device, tonemap_frag);
+    VkShaderModule vert_mod     = nv_load_shader(pp->device, fullscreen_vert);
+    VkShaderModule down_mod     = nv_load_shader(pp->device, bloom_down_frag);
+    VkShaderModule up_mod       = nv_load_shader(pp->device, bloom_up_frag);
+    VkShaderModule tonemap_mod  = nv_load_shader(pp->device, tonemap_frag);
 
     if (!vert_mod || !down_mod || !up_mod || !tonemap_mod) goto fail_shaders;
 
@@ -967,15 +936,19 @@ int nv_postprocess_recreate(NvPostProcess *pp, NvSwapchain *sc) {
     tmp_alloc.vma    = pp->vma;
     tmp_alloc.device = pp->device;
 
-    if (!create_hdr_image(pp, &tmp_alloc)) return 0;
-    if (!create_bloom_image(pp, &tmp_alloc)) return 0;
-    if (!create_hdr_framebuffer(pp, sc)) return 0;
-    if (!create_bloom_framebuffers(pp)) return 0;
-    if (!create_tonemap_framebuffers(pp, sc)) return 0;
-    if (!create_bloom_descriptors(pp)) return 0;
-    if (!create_tonemap_descriptors(pp)) return 0;
+    if (!create_hdr_image(pp, &tmp_alloc)) goto fail_recreate;
+    if (!create_bloom_image(pp, &tmp_alloc)) goto fail_recreate;
+    if (!create_hdr_framebuffer(pp, sc)) goto fail_recreate;
+    if (!create_bloom_framebuffers(pp)) goto fail_recreate;
+    if (!create_tonemap_framebuffers(pp, sc)) goto fail_recreate;
+    if (!create_bloom_descriptors(pp)) goto fail_recreate;
+    if (!create_tonemap_descriptors(pp)) goto fail_recreate;
 
     return 1;
+
+fail_recreate:
+    destroy_size_dependent(pp);
+    return 0;
 }
 
 /* ----------------------------------------------------------------

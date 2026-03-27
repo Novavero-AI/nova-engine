@@ -24,6 +24,7 @@ module NovaEngine.Render.Buffer
   )
 where
 
+import Control.Exception (finally)
 import Data.Word (Word32)
 import Foreign.ForeignPtr
   ( ForeignPtr,
@@ -155,9 +156,7 @@ withMappedBuffer :: Buffer -> (Ptr () -> IO a) -> IO a
 withMappedBuffer (Buffer fptr) action =
   withForeignPtr fptr $ \bufPtr -> do
     mapped <- c_nv_buffer_map bufPtr
-    result <- action mapped
-    c_nv_buffer_unmap bufPtr
-    pure result
+    action mapped `finally` c_nv_buffer_unmap bufPtr
 
 -- | Get the raw @VkBuffer@ handle (for descriptor writes).
 bufferVkHandle :: Buffer -> IO (Ptr ())

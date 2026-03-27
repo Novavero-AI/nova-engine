@@ -4,43 +4,11 @@
 
 #include "nv_compute.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "nv_frame.h"
-
-/* ----------------------------------------------------------------
- * Shader loading
- * ---------------------------------------------------------------- */
-
-static VkShaderModule load_shader(VkDevice device, const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) {
-        fprintf(stderr, "[nova] failed to open shader: %s\n", path);
-        return VK_NULL_HANDLE;
-    }
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    uint32_t *code = malloc((size_t)size);
-    if (!code) { fclose(f); return VK_NULL_HANDLE; }
-    if (fread(code, 1, (size_t)size, f) != (size_t)size) {
-        free(code); fclose(f); return VK_NULL_HANDLE;
-    }
-    fclose(f);
-
-    VkShaderModuleCreateInfo info;
-    memset(&info, 0, sizeof(info));
-    info.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    info.codeSize = (size_t)size;
-    info.pCode    = code;
-
-    VkShaderModule mod = VK_NULL_HANDLE;
-    vkCreateShaderModule(device, &info, NULL, &mod);
-    free(code);
-    return mod;
-}
+#include "nv_util.h"
 
 /* ----------------------------------------------------------------
  * Public API
@@ -106,7 +74,7 @@ NvCompute *nv_compute_create(NvDevice *dev,
     }
 
     /* ---- Compute pipeline ---- */
-    VkShaderModule shader = load_shader(comp->device, shader_path);
+    VkShaderModule shader = nv_load_shader(comp->device, shader_path);
     if (shader == VK_NULL_HANDLE) goto fail;
 
     VkPipelineShaderStageCreateInfo stage;

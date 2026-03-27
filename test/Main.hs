@@ -10,6 +10,7 @@ import Data.IntMap.Strict qualified as IntMap
 import Data.List (isInfixOf)
 import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.Word (Word64)
+import Foreign.Storable (sizeOf)
 import NovaEngine.Animation.Animate
 import NovaEngine.Animation.IK hiding (lookAt)
 import NovaEngine.Animation.Morph
@@ -50,12 +51,14 @@ import NovaEngine.Mesh.UV
 import NovaEngine.Mesh.Weld
 import NovaEngine.Noise
 import NovaEngine.Render.Material
+import NovaEngine.Render.Skin (SkinnedVertex (..))
 import NovaEngine.Render.Texture (calcMipLevels)
 import NovaEngine.SDF
 import NovaEngine.SDF.DualContour
 import NovaEngine.SDF.Isosurface
 import NovaEngine.Scene
 import NovaEngine.Scene.Camera
+import NovaEngine.Scene.FrameUBO (FrameUBO (..))
 import NovaEngine.Scene.Shadow
 import NovaEngine.Spatial.Raycast
 import NovaEngine.Terrain
@@ -107,7 +110,8 @@ tests =
       testGroup "Scene" sceneTests,
       testGroup "Camera" cameraTests,
       testGroup "Material" materialTests,
-      testGroup "ShadowCascade" shadowCascadeTests
+      testGroup "ShadowCascade" shadowCascadeTests,
+      testGroup "StorableLayout" storableLayoutTests
     ]
 
 -- ----------------------------------------------------------------
@@ -2506,4 +2510,27 @@ shadowCascadeTests =
     QC.testProperty "defaultShadowConfig has lambda 0.5" $
       once $
         approxEq (shadowSplitLambda defaultShadowConfig) 0.5
+  ]
+
+-- ----------------------------------------------------------------
+-- Storable layout assertions
+-- ----------------------------------------------------------------
+
+-- | These tests catch GPU struct layout drift. If a Haskell type
+-- changes size, the corresponding GLSL layout and C struct must
+-- also be updated.
+storableLayoutTests :: [TestTree]
+storableLayoutTests =
+  [ QC.testProperty "Vertex is 64 bytes (matches pipeline vertex stride)" $
+      once $
+        sizeOf (undefined :: Vertex) == (64 :: Int),
+    QC.testProperty "SkinnedVertex is 80 bytes (64 base + 16 bone data)" $
+      once $
+        sizeOf (undefined :: SkinnedVertex) == (80 :: Int),
+    QC.testProperty "MaterialParams is 64 bytes (push constant offset 64-127)" $
+      once $
+        sizeOf (undefined :: MaterialParams) == (64 :: Int),
+    QC.testProperty "FrameUBO is 448 bytes (std140 UBO layout)" $
+      once $
+        sizeOf (undefined :: FrameUBO) == (448 :: Int)
   ]

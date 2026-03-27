@@ -44,7 +44,7 @@ void main() {
     float hR = texture(heightMap, uv + vec2( texelSize, 0.0)).r * heightScale;
     float hD = texture(heightMap, uv + vec2(0.0, -texelSize)).r * heightScale;
     float hU = texture(heightMap, uv + vec2(0.0,  texelSize)).r * heightScale;
-    vec3 normal = normalize(vec3(hL - hR, 2.0 * texelSize * heightScale, hD - hU));
+    vec3 normal = normalize(vec3(hL - hR, 2.0 * texelSize, hD - hU));
 
     /* World transform */
     vec4 worldPos = pc.model * vec4(displaced, 1.0);

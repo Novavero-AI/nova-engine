@@ -7,45 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ----------------------------------------------------------------
- * One-shot command buffer (same pattern as old nv_buffer.c)
- * ---------------------------------------------------------------- */
-
-static VkCommandBuffer begin_single_command(VkDevice device,
-                                            VkCommandPool pool) {
-    VkCommandBufferAllocateInfo alloc_info;
-    memset(&alloc_info, 0, sizeof(alloc_info));
-    alloc_info.sType       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    alloc_info.commandPool = pool;
-    alloc_info.level       = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    alloc_info.commandBufferCount = 1;
-
-    VkCommandBuffer cmd = VK_NULL_HANDLE;
-    vkAllocateCommandBuffers(device, &alloc_info, &cmd);
-
-    VkCommandBufferBeginInfo begin;
-    memset(&begin, 0, sizeof(begin));
-    begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(cmd, &begin);
-
-    return cmd;
-}
-
-static void end_single_command(VkDevice device, VkCommandPool pool,
-                               VkQueue queue, VkCommandBuffer cmd) {
-    vkEndCommandBuffer(cmd);
-
-    VkSubmitInfo submit;
-    memset(&submit, 0, sizeof(submit));
-    submit.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers    = &cmd;
-
-    vkQueueSubmit(queue, 1, &submit, VK_NULL_HANDLE);
-    vkQueueWaitIdle(queue);
-    vkFreeCommandBuffers(device, pool, 1, &cmd);
-}
+#include "nv_util.h"
 
 /* ----------------------------------------------------------------
  * Allocator lifecycle
@@ -64,7 +26,7 @@ NvAllocator *nv_allocator_create(NvInstance *inst, NvDevice *dev) {
     alloc->device = dev->handle;
     alloc->vma = nv_vma_create(inst->handle, inst->physical_device,
                                dev->handle,
-                               VK_API_VERSION_1_0);
+                               VK_API_VERSION_1_2);
     if (!alloc->vma) {
         free(alloc);
         return NULL;
@@ -127,7 +89,7 @@ NvAllocBuffer *nv_alloc_buffer_staged(NvAllocator *alloc,
 
     /* Transfer staging -> device-local */
     {
-        VkCommandBuffer cmd = begin_single_command(
+        VkCommandBuffer cmd = nv_begin_single_command(
             alloc->device, dev->command_pool);
 
         VkBufferCopy region;
@@ -135,7 +97,7 @@ NvAllocBuffer *nv_alloc_buffer_staged(NvAllocator *alloc,
         region.size = byte_size;
         vkCmdCopyBuffer(cmd, staging_buf, gpu_buf, 1, &region);
 
-        end_single_command(
+        nv_end_single_command(
             alloc->device, dev->command_pool,
             dev->graphics_queue, cmd);
     }

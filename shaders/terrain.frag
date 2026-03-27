@@ -65,32 +65,9 @@ float sampleShadow(vec3 worldPos) {
 }
 
 void main() {
-    /* Sample splatmap at terrain UV (not tiled UV) */
-    vec2 terrainUV = fragUV;  /* already scaled by uvScale in vert */
-    vec4 splat = texture(splatMap, fragUV / textureSize(splatMap, 0).xy);
-    /* Actually splatmap should use unscaled UV. Let's use fragUV
-     * before the uvScale multiplication. We need the base UV.
-     * Since fragUV was multiplied by uvScale in the vert shader,
-     * the tiled UV is fragUV and the splatmap UV is fragUV / uvScale.
-     * But we don't have uvScale here. Simpler: pass both UVs.
-     *
-     * For now, use fragColor.rg as the splatmap UV
-     * (repurpose since terrain doesn't need vertex color).
-     * Actually, let's just use fragUV for tiled layers and
-     * normalize for splatmap by using the original [0,1] range. */
-
-    /* Splatmap uses normalized terrain coordinates.
-     * Since the terrain patch is a unit grid, inUV is [0,1].
-     * fragUV = inUV * uvScale. So splatmap UV = fragUV / uvScale?
-     * No — we don't know uvScale in the fragment shader.
-     *
-     * Cleanest fix: just use fragUV for tiled textures,
-     * and use fragWorldPos.xz remapped for splatmap.
-     * But splatmap should tile with the terrain, not world.
-     *
-     * Pragmatic approach: use fragUV for both, let the artist
-     * set splatmap to clamp-to-edge and terrain textures to repeat.
-     * Splatmap covers the whole terrain in [0, uvScale]. */
+    /* Splatmap: use fragUV for both splatmap and tiled layers.
+     * Artist should set splatmap sampler to clamp-to-edge and
+     * material layer samplers to repeat. */
     vec4 weights = texture(splatMap, fragUV);
     float wSum = weights.r + weights.g + weights.b + weights.a;
     if (wSum > 0.0) weights /= wSum;

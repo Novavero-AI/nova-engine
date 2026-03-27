@@ -37,14 +37,16 @@ typedef struct NvDebugVertex {
     float cr, cg, cb, ca;
 } NvDebugVertex;
 
+#define NV_DEBUG_MAX_FRAMES_IN_FLIGHT 2
+
 typedef struct NvDebug {
     VkDevice device;
 
-    /* Line rendering */
+    /* Line rendering (per-frame to avoid GPU race) */
     VkPipelineLayout line_layout;
     VkPipeline       line_pipeline;
-    VkBuffer         line_buffer;
-    NvVmaAllocation  line_allocation;
+    VkBuffer         line_buffer[NV_DEBUG_MAX_FRAMES_IN_FLIGHT];
+    NvVmaAllocation  line_allocation[NV_DEBUG_MAX_FRAMES_IN_FLIGHT];
     NvVmaAllocator   vma;
     NvDebugVertex    line_verts[NV_DEBUG_MAX_LINES * NV_DEBUG_VERTS_PER_LINE];
     uint32_t         line_count;
@@ -70,6 +72,10 @@ NvDebug *nv_debug_create(NvDevice *dev, NvAllocator *alloc,
 
 /* Destroy all debug resources. */
 void nv_debug_destroy(NvDebug *dbg);
+
+/* Set the GPU timestamp period (nanoseconds per tick).
+ * Read from VkPhysicalDeviceProperties.limits.timestampPeriod. */
+void nv_debug_set_timestamp_period(NvDebug *dbg, float period);
 
 /* ----------------------------------------------------------------
  * Line drawing (call between begin/end of a render pass)

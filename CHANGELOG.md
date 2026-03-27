@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0.0
+
+- **Render: Textures.** stb_image vendored for PNG/JPG/BMP/TGA loading. VkImage creation with full mipmap chain generation, VkSampler with anisotropy, texture descriptor binding, and default 1x1 textures. New `nv_texture.c` and `Render.Texture` Haskell module.
+- **Render: Scene system.** IntMap-based entity storage, single-pass transform hierarchy, perspective/orthographic camera, mesh registry, and multi-object draw loop.
+- **Render: PBR materials.** Cook-Torrance BRDF (GGX/Smith/Fresnel-Schlick) with metallic-roughness workflow and 5 texture slots (albedo, metallic-roughness, normal, AO, emissive). Per-frame UBO for view, projection, camera position, and lights.
+- **Render: Cascaded shadows.** 4-cascade directional light shadow maps with depth-only render pass and PCF soft shadow sampling in the PBR fragment shader.
+- **Render: Post-processing.** HDR framebuffer (RGBA16F), Jimenez 13-tap bloom with tent upsample, ACES tonemapping, and FXAA 3.11.
+- **Render: GPU animation.** Bone matrix SSBO uploaded per frame, vertex shader skinning with 80-byte skinned vertex format. `computeBoneMatrices` bridges the Haskell animation system to the GPU.
+- **Render: Compute pipelines.** VkComputePipeline infrastructure with morph target dispatch and compute-to-vertex pipeline barriers.
+- **Render: Terrain.** GPU terrain rendering with heightmap displacement and splatmap-based texture blending.
+- **Input: SDL3 action mapping.** Configurable input action system built on SDL3 event polling.
+- **Physics: GJK/EPA + solver.** Pure Haskell rigid body physics with GJK/EPA collision detection and sequential impulse constraint solver.
+- **Debug: line rendering + GPU timestamps.** Debug line rendering overlay and GPU timestamp query support for profiling.
+- **Code quality.** Extracted `nv_util.c` shared helpers, fixed VMA version handling, enabled required device features, fixed debug double-buffer teardown, HiDPI surface scaling, postprocess resource cleanup, and corrected several shader issues.
+- **CI: shader validation, parallelized pipeline.** Added glslangValidator shader check job. C99 strict check now runs in parallel with lint/format. SDL3 and Vulkan SDK versions extracted to workflow-level env vars.
+
 ## 0.3.0.0
 
 - **Render: VMA integration.** All GPU memory allocation now goes through Vulkan Memory Allocator (vendored 3.1.0, MIT). Replaced raw `vkAllocateMemory` calls in buffer and swapchain modules with VMA sub-allocation. New `nv_allocator.c` C99 module, `nv_vma.cpp` C-linkage wrapper (only C++ file in the project), and `Render.Allocator` Haskell module.

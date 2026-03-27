@@ -5,43 +5,11 @@
 #include "nv_debug.h"
 
 #include <math.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "nv_util.h"
 #include "nv_vma.h"
-
-/* ----------------------------------------------------------------
- * Shader loading
- * ---------------------------------------------------------------- */
-
-static VkShaderModule load_shader(VkDevice device, const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) {
-        fprintf(stderr, "[nova] failed to open shader: %s\n", path);
-        return VK_NULL_HANDLE;
-    }
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    uint32_t *code = malloc((size_t)size);
-    if (!code) { fclose(f); return VK_NULL_HANDLE; }
-    if (fread(code, 1, (size_t)size, f) != (size_t)size) {
-        free(code); fclose(f); return VK_NULL_HANDLE;
-    }
-    fclose(f);
-
-    VkShaderModuleCreateInfo info;
-    memset(&info, 0, sizeof(info));
-    info.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    info.codeSize = (size_t)size;
-    info.pCode    = code;
-
-    VkShaderModule mod = VK_NULL_HANDLE;
-    vkCreateShaderModule(device, &info, NULL, &mod);
-    free(code);
-    return mod;
-}
 
 /* ----------------------------------------------------------------
  * Public API — Lifecycle
@@ -60,21 +28,23 @@ NvDebug *nv_debug_create(NvDevice *dev, NvAllocator *alloc,
     if (!dbg) return NULL;
     dbg->device = dev->handle;
 
-    /* ---- Host-visible line buffer ---- */
-    VkBuffer buf = VK_NULL_HANDLE;
-    NvVmaAllocation buf_alloc = NULL;
-    if (!nv_vma_create_buffer(alloc->vma, NV_DEBUG_BUFFER_SIZE,
-                               VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                               0, &buf, &buf_alloc)) {
-        goto fail;
+    /* ---- Host-visible line buffers (one per frame in flight) ---- */
+    dbg->vma = alloc->vma;
+    for (int i = 0; i < NV_DEBUG_MAX_FRAMES_IN_FLIGHT; i++) {
+        VkBuffer buf = VK_NULL_HANDLE;
+        NvVmaAllocation buf_alloc = NULL;
+        if (!nv_vma_create_buffer(alloc->vma, NV_DEBUG_BUFFER_SIZE,
+                                   VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                                   0, &buf, &buf_alloc)) {
+            goto fail;
+        }
+        dbg->line_buffer[i]     = buf;
+        dbg->line_allocation[i] = buf_alloc;
     }
-    dbg->line_buffer     = buf;
-    dbg->line_allocation = buf_alloc;
-    dbg->vma             = alloc->vma;
 
     /* ---- Pipeline ---- */
-    VkShaderModule vert = load_shader(dbg->device, vert_path);
-    VkShaderModule frag = load_shader(dbg->device, frag_path);
+    VkShaderModule vert = nv_load_shader(dbg->device, vert_path);
+    VkShaderModule frag = nv_load_shader(dbg->device, frag_path);
     if (!vert || !frag) {
         if (vert) vkDestroyShaderModule(dbg->device, vert, NULL);
         if (frag) vkDestroyShaderModule(dbg->device, frag, NULL);
@@ -239,6 +209,10 @@ fail:
     return NULL;
 }
 
+void nv_debug_set_timestamp_period(NvDebug *dbg, float period) {
+    if (dbg) dbg->timestamp_period = period;
+}
+
 void nv_debug_destroy(NvDebug *dbg) {
     if (!dbg) return;
     if (dbg->timestamp_pool != VK_NULL_HANDLE)
@@ -247,9 +221,11 @@ void nv_debug_destroy(NvDebug *dbg) {
         vkDestroyPipeline(dbg->device, dbg->line_pipeline, NULL);
     if (dbg->line_layout != VK_NULL_HANDLE)
         vkDestroyPipelineLayout(dbg->device, dbg->line_layout, NULL);
-    if (dbg->line_buffer != VK_NULL_HANDLE)
-        nv_vma_destroy_buffer(dbg->vma, dbg->line_buffer,
-                               dbg->line_allocation);
+    for (int i = 0; i < NV_DEBUG_MAX_FRAMES_IN_FLIGHT; i++) {
+        if (dbg->line_buffer[i] != VK_NULL_HANDLE)
+            nv_vma_destroy_buffer(dbg->vma, dbg->line_buffer[i],
+                                   dbg->line_allocation[i]);
+    }
     free(dbg);
 }
 
@@ -335,15 +311,16 @@ void nv_debug_flush(NvDebug *dbg, NvFrame *fr,
                      const float *view_projection) {
     if (!dbg || !fr || dbg->line_count == 0) return;
 
-    VkCommandBuffer cmd = fr->cmd[fr->current_frame];
+    uint32_t f   = fr->current_frame;
+    VkCommandBuffer cmd = fr->cmd[f];
     uint32_t vert_count = dbg->line_count * 2;
     uint32_t byte_count = vert_count * NV_DEBUG_BYTES_PER_VERT;
 
-    /* Upload line data */
-    void *mapped = nv_vma_map(dbg->vma, dbg->line_allocation);
+    /* Upload line data to the current frame's buffer */
+    void *mapped = nv_vma_map(dbg->vma, dbg->line_allocation[f]);
     if (mapped) {
         memcpy(mapped, dbg->line_verts, byte_count);
-        nv_vma_unmap(dbg->vma, dbg->line_allocation);
+        nv_vma_unmap(dbg->vma, dbg->line_allocation[f]);
     }
 
     /* Draw */
@@ -353,7 +330,7 @@ void nv_debug_flush(NvDebug *dbg, NvFrame *fr,
                         VK_SHADER_STAGE_VERTEX_BIT,
                         0, 64, view_projection);
 
-    VkBuffer     buffers[] = {dbg->line_buffer};
+    VkBuffer     buffers[] = {dbg->line_buffer[f]};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(cmd, 0, 1, buffers, offsets);
     vkCmdDraw(cmd, vert_count, 1, 0, 0);

@@ -4,49 +4,10 @@
 
 #include "nv_pipeline.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* ----------------------------------------------------------------
- * SPIR-V shader loading
- * ---------------------------------------------------------------- */
-
-static VkShaderModule load_shader(VkDevice device, const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) {
-        fprintf(stderr, "[nova] failed to open shader: %s\n", path);
-        return VK_NULL_HANDLE;
-    }
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    /* SPIR-V requires uint32_t alignment — malloc guarantees it. */
-    uint32_t *code = malloc((size_t)size);
-    if (!code) {
-        fclose(f);
-        return VK_NULL_HANDLE;
-    }
-    if (fread(code, 1, (size_t)size, f) != (size_t)size) {
-        free(code);
-        fclose(f);
-        return VK_NULL_HANDLE;
-    }
-    fclose(f);
-
-    VkShaderModuleCreateInfo info;
-    memset(&info, 0, sizeof(info));
-    info.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    info.codeSize = (size_t)size;
-    info.pCode    = code;
-
-    VkShaderModule mod = VK_NULL_HANDLE;
-    vkCreateShaderModule(device, &info, NULL, &mod);
-    free(code);
-    return mod;
-}
+#include "nv_util.h"
 
 /* ----------------------------------------------------------------
  * Render pass
@@ -156,8 +117,8 @@ static int create_layout(NvPipeline *pip,
 static int create_pipeline(NvPipeline *pip, NvSwapchain *sc,
                            const char *vert_path,
                            const char *frag_path) {
-    VkShaderModule vert = load_shader(pip->device, vert_path);
-    VkShaderModule frag = load_shader(pip->device, frag_path);
+    VkShaderModule vert = nv_load_shader(pip->device, vert_path);
+    VkShaderModule frag = nv_load_shader(pip->device, frag_path);
     if (vert == VK_NULL_HANDLE || frag == VK_NULL_HANDLE) {
         if (vert != VK_NULL_HANDLE) {
             vkDestroyShaderModule(pip->device, vert, NULL);

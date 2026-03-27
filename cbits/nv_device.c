@@ -53,6 +53,11 @@ NvDevice *nv_device_create(NvInstance *inst) {
         extensions[ext_count++] = "VK_KHR_portability_subset";
     }
 
+    /* ---- Required device features ---- */
+    VkPhysicalDeviceFeatures features;
+    memset(&features, 0, sizeof(features));
+    features.depthClamp = VK_TRUE;
+
     /* ---- Logical device ---- */
     VkDeviceCreateInfo create_info;
     memset(&create_info, 0, sizeof(create_info));
@@ -61,6 +66,7 @@ NvDevice *nv_device_create(NvInstance *inst) {
     create_info.pQueueCreateInfos       = queue_infos;
     create_info.enabledExtensionCount   = ext_count;
     create_info.ppEnabledExtensionNames = extensions;
+    create_info.pEnabledFeatures        = &features;
 
     if (vkCreateDevice(inst->physical_device, &create_info, NULL,
                        &dev->handle)

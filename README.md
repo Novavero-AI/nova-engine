@@ -8,7 +8,7 @@
 [![CI](https://github.com/Novavero-AI/nova-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Novavero-AI/nova-engine/actions/workflows/ci.yml)
 ![Haskell](https://img.shields.io/badge/haskell-GHC%209.8-purple)
 ![C99](https://img.shields.io/badge/C99-hot%20path-orange)
-![Vulkan](https://img.shields.io/badge/vulkan-1.0-red)
+![Vulkan](https://img.shields.io/badge/vulkan-1.2-red)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
 
 </p>
@@ -39,6 +39,9 @@ A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering
 │  nv_window     nv_instance   nv_device      │
 │  nv_allocator  nv_swapchain  nv_pipeline    │
 │  nv_buffer     nv_frame      nv_descriptor  │
+│  nv_texture   nv_shadow     nv_postprocess │
+│  nv_skin_pipeline  nv_compute  nv_terrain  │
+│  nv_input     nv_debug      nv_descriptor  │
 ├─────────────────────────────────────────────┤
 │  Vendored: VMA 3.1.0 (nv_vma.cpp)          │
 └─────────────────────────────────────────────┘
@@ -134,9 +137,18 @@ A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering
 | `nv_buffer` | `Render.Buffer` | VMA-backed vertex and index buffer upload via staging |
 | `nv_frame` | `Render.Frame` | 2 frames in flight, semaphores/fences, command recording, descriptor binding |
 | `nv_descriptor` | `Render.Descriptor` | Descriptor set layouts, pools, allocation, buffer/image write helpers |
+| `nv_texture` | `Render.Texture` | stb_image loading, VkImage with mipmaps, samplers, default textures |
+| `nv_material` | `Render.Material` | PBR material (5 texture slots), per-frame UBO, Cook-Torrance BRDF |
+| `nv_shadow` | `Render.Shadow` | 4-cascade CSM, depth-only pass, PCF soft shadows |
+| `nv_postprocess` | `Render.PostProcess` | HDR framebuffer, bloom, ACES tonemap, FXAA |
+| `nv_skin_pipeline` | `Render.Skin` | Bone matrix SSBO, vertex shader skinning, 80-byte skinned vertex |
+| `nv_compute` | `Render.Compute` | Compute pipeline, morph target dispatch, pipeline barriers |
+| `nv_terrain` | `Render.Terrain` | Heightmap displacement, splatmap, terrain render pass |
+| `nv_input` | `Render.Input` | SDL3 action mapping, input event dispatch |
+| `nv_debug` | `Render.Debug` | Debug line rendering, GPU timestamp queries |
 | `nv_vma` | — | C-linkage wrapper around VMA (only C++ in the project) |
 
-**Shaders:** `default.vert` (MVP push constant), `default.frag` (directional N dot L lighting, SRGB output)
+**Shaders:** PBR (vertex + fragment), shadow (depth-only), bloom (downsample + upsample), tonemap, terrain (displacement + splatmap), debug (line rendering), compute (morph targets)
 
 ---
 
@@ -190,7 +202,7 @@ main = do
 - **C99 hot path.** Vulkan and SDL3 calls run in C99 — zero FFI overhead in the render loop.
 - **VMA memory.** All GPU allocations go through Vulkan Memory Allocator — no raw `vkAllocateMemory`, no 4096 allocation limit.
 - **Haskell brain.** Mesh generation, animation, terrain, SDF, noise — complex algorithms with type safety.
-- **Minimal deps.** Haskell: `base`, `bytestring`, `text`, `containers`, `array`. System: `libvulkan`, `libSDL3`. Vendored: VMA 3.1.0.
+- **Minimal deps.** Haskell: `base`, `bytestring`, `containers`, `array`. System: `libvulkan`, `libSDL3`. Vendored: VMA 3.1.0.
 - **Pure math.** All geometry, animation, and noise functions are pure. No IO, no GPU, no mutable state.
 - **Total.** No partial functions. Invalid inputs return `Nothing`, not crashes.
 - **Hand-rolled.** No `linear`, `vector`, `JuicyPixels`, or Haskell Vulkan/SDL bindings. The math is ours. The C is ours.
@@ -227,74 +239,22 @@ cabal test --test-show-details=streaming
 
 ### Done
 
-- Math foundation (vectors, matrices, quaternions, Storable instances)
-- Mesh generation (20 modules: primitives, curves, surfaces, subdivision, simplification, booleans, import/export)
-- SDF (signed distance fields, marching cubes, dual contouring)
-- Noise (Perlin, simplex, Worley, FBM, ridged, turbulence, domain warp)
-- Terrain (heightmap generation, thermal/hydraulic erosion, scatter)
-- Animation (skeleton, pose, FK, IK, skinning, morph targets)
-- Spatial (ray-mesh intersection, BVH)
-- 255 property tests
-- C99 Vulkan + SDL3 render layer (window, instance, device, swapchain, pipeline, buffer, frame)
-- VMA integration (all GPU memory sub-allocated, zero raw vkAllocateMemory)
-- Descriptor set management (layouts, pools, allocation, buffer/image writes)
-- CI: HLint, Ormolu, C99 strict check, cross-platform build (Linux, macOS, Windows)
-
-### Phase 2: Textures
-
-- [ ] Vendor stb_image.h for image loading (PNG, JPG, BMP, TGA)
-- [ ] VkImage creation with mipmap generation (vkCmdBlitImage chain)
-- [ ] VkSampler (linear, repeat, anisotropy)
-- [ ] Texture descriptor binding via Phase 1 descriptor infrastructure
-- [ ] Default textures (1x1 white, 1x1 flat normal)
-- [ ] Haskell FFI: `Render.Texture`, `Render.ImageLoad`
-
-### Phase 3: Scene System
-
-- [ ] Entity storage (IntMap-based, pure Haskell)
-- [ ] Transform hierarchy with single-pass world transform computation
-- [ ] Camera (perspective, orthographic)
-- [ ] Mesh registry (mesh handle to GPU buffer mapping)
-- [ ] Multi-object draw loop
-
-### Phase 4: PBR Materials
-
-- [ ] Cook-Torrance BRDF (GGX distribution, Smith geometry, Fresnel-Schlick)
-- [ ] Metallic-roughness workflow with 5 texture slots (albedo, metallic-roughness, normal, AO, emissive)
-- [ ] Per-frame UBO (view, projection, camera position, lights)
-- [ ] PBR vertex + fragment shaders
-
-### Phase 5: Shadows
-
-- [ ] Cascaded shadow maps (4 cascades, directional light)
-- [ ] Depth-only render pass and shadow vertex shader
-- [ ] PCF soft shadows in PBR fragment shader
-
-### Phase 6: Post-Processing
-
-- [ ] HDR framebuffer (RGBA16F)
-- [ ] Bloom (Jimenez 13-tap downsample + tent upsample)
-- [ ] ACES tonemapping
-- [ ] FXAA 3.11
-
-### Phase 7: GPU Animation
-
-- [ ] Bone matrix SSBO with vertex shader skinning
-- [ ] 80-byte skinned vertex format (base 64B + bone IDs + weights)
-- [ ] `computeBoneMatrices` bridge from Haskell animation system
-
-### Phase 8: Compute
-
-- [ ] VkComputePipeline infrastructure
-- [ ] Morph target compute shader
-- [ ] Compute-to-vertex pipeline barrier
-
-### Phase 9-12: Terrain Rendering, Input/Audio, Physics, Debug
-
-- [ ] GPU terrain (clipmap/CDLOD, heightmap displacement, splatmap)
-- [ ] SDL3 input action mapping, spatial audio
-- [ ] Pure Haskell physics (GJK/EPA, rigid body, sequential impulse solver)
-- [ ] Dear ImGui integration, GPU profiling, debug line rendering
+- [x] Math + Mesh + SDF + Noise + Terrain + Animation + Spatial + Tests
+- [x] C99 Vulkan + SDL3 render layer
+- [x] VMA integration
+- [x] Descriptor set management
+- [x] Textures (stb_image, mipmaps, samplers)
+- [x] Scene system (IntMap entities, transform hierarchy, camera)
+- [x] PBR materials (Cook-Torrance, 5 texture slots)
+- [x] Shadows (4-cascade CSM, PCF)
+- [x] Post-processing (HDR, bloom, ACES tonemap, FXAA)
+- [x] GPU animation (bone SSBO, skinned vertices)
+- [x] Compute (morph targets)
+- [x] Terrain rendering (heightmap displacement, splatmap)
+- [x] Input (SDL3 action mapping)
+- [x] Physics (GJK/EPA, sequential impulse solver)
+- [x] Debug (line rendering, GPU timestamps)
+- [x] CI (HLint, Ormolu, C99 strict, shader validation, cross-platform)
 
 ---
 

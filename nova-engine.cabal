@@ -105,6 +105,7 @@ library
     NovaEngine.Scene.Shadow
 
   c-sources:
+    cbits/nv_util.c
     cbits/nv_ffi.c
     cbits/nv_window.c
     cbits/nv_instance.c
@@ -138,7 +139,6 @@ library
     , bytestring    >= 0.11 && < 0.13
     , containers    >= 0.6  && < 0.8
     , array         >= 0.5  && < 0.6
-    , text          >= 2.0  && < 2.2
 
   hs-source-dirs:   src
   default-language:  GHC2021

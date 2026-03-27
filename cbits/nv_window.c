@@ -70,11 +70,15 @@ void nv_window_poll_events(NvWindow *window) {
         case SDL_EVENT_QUIT:
             window->should_close = 1;
             break;
-        case SDL_EVENT_WINDOW_RESIZED:
+        case SDL_EVENT_WINDOW_RESIZED: {
             window->was_resized = 1;
-            window->width  = (uint32_t)event.window.data1;
-            window->height = (uint32_t)event.window.data2;
+            /* Use pixel size, not window coords (correct on HiDPI). */
+            int pw = 0, ph = 0;
+            SDL_GetWindowSizeInPixels(window->handle, &pw, &ph);
+            window->width  = (uint32_t)pw;
+            window->height = (uint32_t)ph;
             break;
+        }
         default:
             break;
         }

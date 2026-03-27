@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_call:
 
+env:
+  SDL3_VERSION: "3.2.8"
+  VULKAN_SDK_VERSION: "1.4.304.1"
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -42,7 +46,6 @@ jobs:
 
   c-check:
     name: C99 Strict
-    needs: [lint, format]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -55,7 +58,7 @@ jobs:
 
           # SDL3: build from source (not in Ubuntu repos yet)
           if ! pkg-config --exists sdl3 2>/dev/null; then
-            git clone --depth 1 --branch release-3.2.8 \
+            git clone --depth 1 --branch release-${{ env.SDL3_VERSION }} \
               https://github.com/libsdl-org/SDL.git /tmp/SDL3
             cmake -S /tmp/SDL3 -B /tmp/SDL3/build -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
@@ -84,6 +87,17 @@ jobs:
             $(pkg-config --cflags vulkan) \
             cbits/nv_vma.cpp
 
+  shader-check:
+    name: Shader Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install glslangValidator
+        run: sudo apt-get install -y -qq glslang-tools
+      - name: Validate shaders
+        run: |
+          for f in shaders/*.vert shaders/*.frag shaders/*.comp; do echo "validating $f"; glslangValidator --target-env vulkan1.0 "$f"; done
+
   # ---------------------------------------------------------------------------
   # Packaging check (Linux-only)
   # ---------------------------------------------------------------------------
@@ -106,7 +120,7 @@ jobs:
 
   build:
     name: Build (${{ matrix.name }})
-    needs: [cabal-check]
+    needs: [cabal-check, shader-check]
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -132,7 +146,7 @@ jobs:
           # SDL3: build from source if not packaged
           if ! pkg-config --exists sdl3 2>/dev/null; then
             sudo apt-get install -y -qq cmake ninja-build
-            git clone --depth 1 --branch release-3.2.8 \
+            git clone --depth 1 --branch release-${{ env.SDL3_VERSION }} \
               https://github.com/libsdl-org/SDL.git /tmp/SDL3
             cmake -S /tmp/SDL3 -B /tmp/SDL3/build -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
@@ -153,7 +167,7 @@ jobs:
         shell: pwsh
         run: |
           # Vulkan SDK
-          $VK_VERSION = "1.4.304.1"
+          $VK_VERSION = "${{ env.VULKAN_SDK_VERSION }}"
           $VK_URL = "https://sdk.lunarg.com/sdk/download/$VK_VERSION/windows/VulkanSDK-$VK_VERSION-Installer.exe"
           Invoke-WebRequest -Uri $VK_URL -OutFile "$env:TEMP\vulkan-sdk.exe"
           Start-Process -Wait -FilePath "$env:TEMP\vulkan-sdk.exe" -ArgumentList "--accept-licenses --default-answer --confirm-command install"
@@ -163,7 +177,7 @@ jobs:
           echo "$env:VULKAN_SDK\Bin" >> $env:GITHUB_PATH
 
           # SDL3 (pre-built dev libs)
-          $SDL_VERSION = "3.2.8"
+          $SDL_VERSION = "${{ env.SDL3_VERSION }}"
           $SDL_URL = "https://github.com/libsdl-org/SDL/releases/download/release-$SDL_VERSION/SDL3-devel-$SDL_VERSION-mingw.zip"
           Invoke-WebRequest -Uri $SDL_URL -OutFile "$env:TEMP\sdl3.zip"
           Expand-Archive -Path "$env:TEMP\sdl3.zip" -DestinationPath "$env:TEMP\sdl3"

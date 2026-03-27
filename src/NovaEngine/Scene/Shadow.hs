@@ -23,6 +23,7 @@ module NovaEngine.Scene.Shadow
   )
 where
 
+import Data.List (foldl')
 import NovaEngine.Math.Matrix
   ( inverse,
     lookAt,
@@ -210,9 +211,6 @@ aabbFromPoints (V3 x0 y0 z0 : rest) =
     )
     (V3 x0 y0 z0, V3 x0 y0 z0)
     rest
-  where
-    foldl' _ acc [] = acc
-    foldl' f !acc (h : t) = foldl' f (f acc h) t
 
 -- | Snap a value down to the nearest multiple of a step.
 snapFloor :: Float -> Float -> Float

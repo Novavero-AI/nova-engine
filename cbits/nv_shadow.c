@@ -4,50 +4,11 @@
 
 #include "nv_shadow.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "nv_util.h"
 #include "nv_vma.h"
-
-/* ----------------------------------------------------------------
- * SPIR-V shader loading (same pattern as nv_pipeline.c)
- * ---------------------------------------------------------------- */
-
-static VkShaderModule load_shader(VkDevice device, const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) {
-        fprintf(stderr, "[nova] failed to open shader: %s\n", path);
-        return VK_NULL_HANDLE;
-    }
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    uint32_t *code = malloc((size_t)size);
-    if (!code) {
-        fclose(f);
-        return VK_NULL_HANDLE;
-    }
-    if (fread(code, 1, (size_t)size, f) != (size_t)size) {
-        free(code);
-        fclose(f);
-        return VK_NULL_HANDLE;
-    }
-    fclose(f);
-
-    VkShaderModuleCreateInfo info;
-    memset(&info, 0, sizeof(info));
-    info.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    info.codeSize = (size_t)size;
-    info.pCode    = code;
-
-    VkShaderModule mod = VK_NULL_HANDLE;
-    vkCreateShaderModule(device, &info, NULL, &mod);
-    free(code);
-    return mod;
-}
 
 /* ----------------------------------------------------------------
  * Depth array image
@@ -243,7 +204,7 @@ static int create_framebuffers(NvShadow *shadow) {
  * ---------------------------------------------------------------- */
 
 static int create_pipeline(NvShadow *shadow, const char *vert_path) {
-    VkShaderModule vert = load_shader(shadow->device, vert_path);
+    VkShaderModule vert = nv_load_shader(shadow->device, vert_path);
     if (vert == VK_NULL_HANDLE) {
         return 0;
     }

@@ -4,41 +4,10 @@
 
 #include "nv_skin_pipeline.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* ----------------------------------------------------------------
- * Shader loading (same pattern as nv_pipeline.c)
- * ---------------------------------------------------------------- */
-
-static VkShaderModule load_shader(VkDevice device, const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) {
-        fprintf(stderr, "[nova] failed to open shader: %s\n", path);
-        return VK_NULL_HANDLE;
-    }
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    uint32_t *code = malloc((size_t)size);
-    if (!code) { fclose(f); return VK_NULL_HANDLE; }
-    if (fread(code, 1, (size_t)size, f) != (size_t)size) {
-        free(code); fclose(f); return VK_NULL_HANDLE;
-    }
-    fclose(f);
-
-    VkShaderModuleCreateInfo info;
-    memset(&info, 0, sizeof(info));
-    info.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    info.codeSize = (size_t)size;
-    info.pCode    = code;
-
-    VkShaderModule mod = VK_NULL_HANDLE;
-    vkCreateShaderModule(device, &info, NULL, &mod);
-    free(code);
-    return mod;
-}
+#include "nv_util.h"
 
 /* ----------------------------------------------------------------
  * Public API
@@ -108,8 +77,8 @@ NvSkinPipeline *nv_skin_pipeline_create(NvDevice *dev,
     if (layout_result != VK_SUCCESS) goto fail;
 
     /* ---- Shaders ---- */
-    VkShaderModule vert = load_shader(pip->device, vert_path);
-    VkShaderModule frag = load_shader(pip->device, frag_path);
+    VkShaderModule vert = nv_load_shader(pip->device, vert_path);
+    VkShaderModule frag = nv_load_shader(pip->device, frag_path);
     if (vert == VK_NULL_HANDLE || frag == VK_NULL_HANDLE) {
         if (vert) vkDestroyShaderModule(pip->device, vert, NULL);
         if (frag) vkDestroyShaderModule(pip->device, frag, NULL);
