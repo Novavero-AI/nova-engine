@@ -222,6 +222,26 @@ jobs:
       - name: Build
         run: cabal build --enable-tests --ghc-options="-Werror"
 
+      - name: Check DLL availability (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== PATH ==="
+          $env:PATH -split ';' | ForEach-Object { Write-Host "  $_" }
+          Write-Host "=== Checking DLLs ==="
+          foreach ($dll in @('SDL3.dll','vulkan-1.dll','libstdc++-6.dll')) {
+            $found = & where.exe $dll 2>&1
+            Write-Host "${dll}: $found"
+          }
+          $testExe = Get-ChildItem -Path dist-newstyle -Recurse -Filter "nova-engine-test.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($testExe) {
+            Write-Host "=== Test exe deps ==="
+            & objdump -p $testExe.FullName 2>&1 | Select-String "DLL Name"
+            Write-Host "=== Direct run ==="
+            try { & $testExe.FullName --list 2>&1 } catch { Write-Host "CAUGHT: $_" }
+            Write-Host "Exit code: $LASTEXITCODE"
+          }
+
       - name: Test
         run: cabal test --enable-tests --ghc-options="-Werror" --test-show-details=streaming
 
