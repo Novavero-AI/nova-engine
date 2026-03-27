@@ -18,7 +18,7 @@
 
 A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering, SDL3 windowing, VMA memory management, command recording). Haskell handles the brain (mesh generation, skeletal animation, terrain, frame orchestration). Pure math, zero unnecessary deps.
 
-**67 modules. 305 property tests.**
+**68 modules. 305 property tests. Cross-platform CI (Linux, macOS, Windows).**
 
 ---
 
@@ -28,24 +28,31 @@ A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering
 ┌─────────────────────────────────────────────┐
 │           User Application                  │
 ├─────────────────────────────────────────────┤
-│  Haskell Brain                              │
+│  nova-pure (49 modules, src/)               │
 │  Math, Mesh, SDF, Noise, Terrain,           │
-│  Animation, Spatial, Frame orchestration    │
+│  Animation, Spatial, Physics, Scene,        │
+│  Render.Types, Input.ActionMap              │
 ├─────────────────────────────────────────────┤
-│  FFI Boundary (unsafe ccall, flat args)     │
-│  NovaEngine.Render.*                        │
+│  FFI Layer (19 modules, src-ffi/)           │
+│  Render.Window .. Render.Terrain            │
+│  Input, Debug                               │
 ├─────────────────────────────────────────────┤
-│  C99 Hot Path (VMA-backed)                  │
+│  C99 Hot Path (cbits/)                      │
 │  nv_window     nv_instance   nv_device      │
 │  nv_allocator  nv_swapchain  nv_pipeline    │
 │  nv_buffer     nv_frame      nv_descriptor  │
-│  nv_texture   nv_shadow     nv_postprocess │
-│  nv_skin_pipeline  nv_compute  nv_terrain  │
-│  nv_input     nv_debug      nv_util        │
+│  nv_texture    nv_shadow     nv_postprocess │
+│  nv_skin_pipeline  nv_compute  nv_terrain   │
+│  nv_input      nv_debug      nv_util        │
 ├─────────────────────────────────────────────┤
 │  Vendored: VMA 3.1.0 (nv_vma.cpp)          │
 └─────────────────────────────────────────────┘
 ```
+
+The codebase is split into two cabal libraries sharing one package:
+
+- **`nova-pure`** — pure Haskell with zero native dependencies. All math, geometry, animation, physics, and scene logic. Tested on all platforms without SDL3/Vulkan installed.
+- **`nova-engine`** (public) — re-exports `nova-pure` and adds the C99 FFI layer. Users depend on this.
 
 ---
 
@@ -155,6 +162,12 @@ A general-purpose 3D graphics engine. C99 handles the hot path (Vulkan rendering
 |--------|-------------|
 | `Debug` | Immediate-mode debug line rendering, box/sphere wireframes, GPU timestamp profiling |
 
+### Render Types (pure)
+
+| Module | Description |
+|--------|-------------|
+| `Render.Types` | `Texture` handle, `Material`, `MaterialParams` Storable, `SkinnedVertex` Storable, `calcMipLevels` |
+
 ### Render (C99 Vulkan + SDL3)
 
 | C99 Module | Haskell Wrapper | Description |
@@ -236,7 +249,7 @@ main = do
 - **C99 hot path.** Vulkan and SDL3 calls run in C99 — zero FFI overhead in the render loop.
 - **VMA memory.** All GPU allocations go through Vulkan Memory Allocator — no raw `vkAllocateMemory`, no 4096 allocation limit.
 - **Haskell brain.** Mesh generation, animation, terrain, SDF, noise — complex algorithms with type safety.
-- **Minimal deps.** Haskell: `base`, `bytestring`, `containers`, `array`. System: `libvulkan`, `libSDL3`. Vendored: VMA 3.1.0.
+- **Minimal deps.** Haskell: `base`, `containers`, `array`. System: `libvulkan`, `libSDL3`. Vendored: VMA 3.1.0.
 - **Pure math.** All geometry, animation, and noise functions are pure. No IO, no GPU, no mutable state.
 - **Total.** No partial functions. Invalid inputs return `Nothing`, not crashes.
 - **Hand-rolled.** No `linear`, `vector`, `JuicyPixels`, or Haskell Vulkan/SDL bindings. The math is ours. The C is ours.
@@ -267,6 +280,8 @@ cabal build all --ghc-options="-Werror"
 cabal test --test-show-details=streaming
 ```
 
+Tests depend only on `nova-pure` (no native libs needed). The full library requires Vulkan and SDL3.
+
 ---
 
 ## Roadmap
@@ -289,6 +304,7 @@ cabal test --test-show-details=streaming
 - [x] Physics (GJK/EPA, sequential impulse solver)
 - [x] Debug (line rendering, GPU timestamps)
 - [x] CI (HLint, Ormolu, C99 strict, shader validation, cross-platform)
+- [x] Internal library split (`nova-pure` + FFI, tests run on all platforms)
 
 ---
 

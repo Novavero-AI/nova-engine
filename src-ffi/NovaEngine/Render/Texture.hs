@@ -10,7 +10,7 @@
 --          True FilterLinear WrapRepeat
 -- @
 module NovaEngine.Render.Texture
-  ( -- * Handle
+  ( -- * Handle (re-exported from Render.Types)
     Texture,
 
     -- * Configuration
@@ -29,7 +29,7 @@ module NovaEngine.Render.Texture
     textureHeight,
     textureMipLevels,
 
-    -- * Utilities
+    -- * Utilities (re-exported from Render.Types)
     calcMipLevels,
 
     -- * Internal (for other Render modules)
@@ -37,13 +37,11 @@ module NovaEngine.Render.Texture
   )
 where
 
-import Data.Bits (shiftR)
 import Data.Word (Word32, Word8)
 import Foreign.C.String (withCString)
 import Foreign.C.Types (CInt (..))
 import Foreign.ForeignPtr
-  ( ForeignPtr,
-    finalizeForeignPtr,
+  ( finalizeForeignPtr,
     newForeignPtr,
     withForeignPtr,
   )
@@ -51,13 +49,7 @@ import Foreign.Marshal.Array (withArrayLen)
 import Foreign.Ptr (FunPtr, Ptr, castPtr, nullPtr)
 import NovaEngine.Render.Allocator (Allocator, withAllocatorPtr)
 import NovaEngine.Render.Device (Device, withDevicePtr)
-
--- ----------------------------------------------------------------
--- Handle
--- ----------------------------------------------------------------
-
--- | Opaque handle to a Vulkan texture (image + view + sampler).
-newtype Texture = Texture (ForeignPtr ())
+import NovaEngine.Render.Types (Texture (..), calcMipLevels)
 
 -- ----------------------------------------------------------------
 -- Configuration
@@ -242,23 +234,6 @@ textureHeight (Texture fptr) =
 textureMipLevels :: Texture -> IO Word32
 textureMipLevels (Texture fptr) =
   withForeignPtr fptr c_nv_texture_mip_levels
-
--- ----------------------------------------------------------------
--- Utilities
--- ----------------------------------------------------------------
-
--- | Compute the number of mip levels for given dimensions.
---
--- @calcMipLevels 256 256 == 9@
---
--- @calcMipLevels 1 1 == 1@
-calcMipLevels :: Word32 -> Word32 -> Word32
-calcMipLevels w h
-  | w == 0 || h == 0 = 1
-  | otherwise = go 1 (max w h)
-  where
-    go !levels 1 = levels
-    go !levels d = go (levels + 1) (d `shiftR` 1)
 
 -- ----------------------------------------------------------------
 -- Internal

@@ -4,7 +4,7 @@
 -- animation. Bone matrices are uploaded to an SSBO each frame
 -- from the pure Haskell animation system.
 module NovaEngine.Render.Skin
-  ( -- * Skinned vertex
+  ( -- * Skinned vertex (re-exported from Render.Types)
     SkinnedVertex (..),
 
     -- * Constants
@@ -23,7 +23,7 @@ where
 
 import Data.IntMap.Strict qualified as IntMap
 import Foreign.Ptr (Ptr, castPtr)
-import Foreign.Storable (Storable (..), pokeByteOff, pokeElemOff)
+import Foreign.Storable (Storable (..), pokeElemOff)
 import NovaEngine.Animation.Pose (Pose, applyPoseFull)
 import NovaEngine.Animation.Skeleton (Skeleton, skelJoints, skelRestPositions)
 import NovaEngine.Animation.Skin (BoneWeight (..), SkinVertex (..))
@@ -32,44 +32,7 @@ import NovaEngine.Math.Quaternion (identityQuat)
 import NovaEngine.Math.Types
 import NovaEngine.Mesh.Types (Vertex (..))
 import NovaEngine.Render.Buffer (Buffer, withMappedBuffer)
-
--- ----------------------------------------------------------------
--- Skinned vertex (80 bytes)
--- ----------------------------------------------------------------
-
--- | GPU-ready vertex for skeletal animation.
---
--- 80 bytes: position(12) + normal(12) + uv(8) + tangent(16) +
--- boneIndices(16) + boneWeights(16). No color attribute — the
--- skinned shader uses white.
-data SkinnedVertex = SkinnedVertex
-  { skPosition :: !V3,
-    skNormal :: !V3,
-    skUV :: !V2,
-    skTangent :: !V4,
-    skBoneIndices :: !V4,
-    skBoneWeights :: !V4
-  }
-  deriving (Show, Eq)
-
-instance Storable SkinnedVertex where
-  sizeOf _ = 80
-  alignment _ = 4
-  peek p = do
-    pos <- peekByteOff p 0
-    nrm <- peekByteOff p 12
-    uv <- peekByteOff p 24
-    tang <- peekByteOff p 32
-    idx <- peekByteOff p 48
-    wt <- peekByteOff p 64
-    pure (SkinnedVertex pos nrm uv tang idx wt)
-  poke p (SkinnedVertex pos nrm uv tang idx wt) = do
-    pokeByteOff p 0 pos
-    pokeByteOff p 12 nrm
-    pokeByteOff p 24 uv
-    pokeByteOff p 32 tang
-    pokeByteOff p 48 idx
-    pokeByteOff p 64 wt
+import NovaEngine.Render.Types (SkinnedVertex (..))
 
 -- ----------------------------------------------------------------
 -- Constants

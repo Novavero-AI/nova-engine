@@ -15,6 +15,7 @@
 - **Debug: line rendering + GPU timestamps.** Debug line rendering overlay and GPU timestamp query support for profiling.
 - **Code quality.** Extracted `nv_util.c` shared helpers, fixed VMA version handling, enabled required device features, fixed debug double-buffer teardown, HiDPI surface scaling, postprocess resource cleanup, and corrected several shader issues.
 - **CI: shader validation, parallelized pipeline.** Added glslangValidator shader check job. C99 strict check now runs in parallel with lint/format. SDL3 and Vulkan SDK versions extracted to workflow-level env vars.
+- **Internal library split.** Package now contains `nova-pure` (49 pure Haskell modules, `src/`) and the public `nova-engine` library (19 FFI modules, `src-ffi/`). Tests depend only on `nova-pure` and run on all platforms including Windows without needing native DLLs. Pure types (`Texture`, `Material`, `MaterialParams`, `SkinnedVertex`, `calcMipLevels`) extracted into new `Render.Types` module. Public API unchanged — `build-depends: nova-engine` still provides the full module set via `reexported-modules`.
 
 ## 0.3.0.0
 

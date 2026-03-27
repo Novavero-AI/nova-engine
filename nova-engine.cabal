@@ -22,7 +22,12 @@ extra-doc-files:
     README.md
     CHANGELOG.md
 
-library
+-- -----------------------------------------------------------------
+-- Pure Haskell library (no native dependencies)
+-- -----------------------------------------------------------------
+
+library nova-pure
+  visibility:       private
   exposed-modules:
     NovaEngine
     -- Math
@@ -70,7 +75,45 @@ library
     NovaEngine.Animation.Morph
     -- Spatial
     NovaEngine.Spatial.Raycast
-    -- Render
+    -- Physics
+    NovaEngine.Physics.GJK
+    NovaEngine.Physics.EPA
+    NovaEngine.Physics.Shapes
+    NovaEngine.Physics.Solver
+    -- Scene
+    NovaEngine.Scene
+    NovaEngine.Scene.Camera
+    NovaEngine.Scene.FrameUBO
+    NovaEngine.Scene.Shadow
+    -- Render (pure types only)
+    NovaEngine.Render.Types
+    -- Input (pure layer)
+    NovaEngine.Input.ActionMap
+
+  build-depends:
+      base          >= 4.19 && < 5
+    , containers    >= 0.6  && < 0.8
+    , array         >= 0.5  && < 0.6
+
+  hs-source-dirs:   src
+  default-language:  GHC2021
+  default-extensions: StrictData
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -haddock
+    -fspecialise-aggressively
+    -fexpose-all-unfoldings
+
+-- -----------------------------------------------------------------
+-- Full library (pure + C99 FFI)
+-- -----------------------------------------------------------------
+
+library
+  exposed-modules:
+    -- Render (C99 FFI)
     NovaEngine.Render.Window
     NovaEngine.Render.Instance
     NovaEngine.Render.Device
@@ -88,21 +131,61 @@ library
     NovaEngine.Render.SkinPipeline
     NovaEngine.Render.Compute
     NovaEngine.Render.Terrain
-    -- Input
+    -- Input (C99 FFI)
     NovaEngine.Input
-    NovaEngine.Input.ActionMap
-    -- Debug
+    -- Debug (C99 FFI)
     NovaEngine.Debug
-    -- Physics
-    NovaEngine.Physics.GJK
-    NovaEngine.Physics.EPA
-    NovaEngine.Physics.Shapes
-    NovaEngine.Physics.Solver
-    -- Scene
-    NovaEngine.Scene
-    NovaEngine.Scene.Camera
-    NovaEngine.Scene.FrameUBO
-    NovaEngine.Scene.Shadow
+
+  reexported-modules:
+      NovaEngine
+    , NovaEngine.Math.Types
+    , NovaEngine.Math.Vector
+    , NovaEngine.Math.Matrix
+    , NovaEngine.Math.Quaternion
+    , NovaEngine.Mesh.Types
+    , NovaEngine.Mesh.Buffer
+    , NovaEngine.Mesh.Combine
+    , NovaEngine.Mesh.Primitives
+    , NovaEngine.Mesh.Curve
+    , NovaEngine.Mesh.Surface
+    , NovaEngine.Mesh.Loft
+    , NovaEngine.Mesh.Icosphere
+    , NovaEngine.Mesh.Hull
+    , NovaEngine.Mesh.Deform
+    , NovaEngine.Mesh.Subdivision
+    , NovaEngine.Mesh.Smooth
+    , NovaEngine.Mesh.Simplify
+    , NovaEngine.Mesh.Weld
+    , NovaEngine.Mesh.Remesh
+    , NovaEngine.Mesh.Boolean
+    , NovaEngine.Mesh.Symmetry
+    , NovaEngine.Mesh.UV
+    , NovaEngine.Mesh.LOD
+    , NovaEngine.Mesh.Export
+    , NovaEngine.Mesh.Import
+    , NovaEngine.SDF
+    , NovaEngine.SDF.Isosurface
+    , NovaEngine.SDF.DualContour
+    , NovaEngine.Noise
+    , NovaEngine.Terrain
+    , NovaEngine.Terrain.Scatter
+    , NovaEngine.Animation.Skeleton
+    , NovaEngine.Animation.Pose
+    , NovaEngine.Animation.Animate
+    , NovaEngine.Animation.IK
+    , NovaEngine.Animation.Skin
+    , NovaEngine.Animation.Morph
+    , NovaEngine.Spatial.Raycast
+    , NovaEngine.Physics.GJK
+    , NovaEngine.Physics.EPA
+    , NovaEngine.Physics.Shapes
+    , NovaEngine.Physics.Solver
+    , NovaEngine.Scene
+    , NovaEngine.Scene.Camera
+    , NovaEngine.Scene.FrameUBO
+    , NovaEngine.Scene.Shadow
+    , NovaEngine.Render.Types
+    , NovaEngine.Input.ActionMap
 
   c-sources:
     cbits/nv_util.c
@@ -135,11 +218,12 @@ library
   pkgconfig-depends: sdl3, vulkan
 
   build-depends:
-      base          >= 4.19 && < 5
+      nova-engine:nova-pure
+    , base          >= 4.19 && < 5
     , containers    >= 0.6  && < 0.8
     , array         >= 0.5  && < 0.6
 
-  hs-source-dirs:   src
+  hs-source-dirs:   src-ffi
   default-language:  GHC2021
   default-extensions: StrictData
   ghc-options:
@@ -151,13 +235,17 @@ library
     -fspecialise-aggressively
     -fexpose-all-unfoldings
 
+-- -----------------------------------------------------------------
+-- Tests (pure only — no native dependencies)
+-- -----------------------------------------------------------------
+
 test-suite nova-engine-test
   type:             exitcode-stdio-1.0
   main-is:          Main.hs
   hs-source-dirs:   test
   build-depends:
       base          >= 4.19 && < 5
-    , nova-engine
+    , nova-engine:nova-pure
     , containers    >= 0.6  && < 0.8
     , QuickCheck    >= 2.14 && < 2.16
     , tasty         >= 1.4  && < 1.6

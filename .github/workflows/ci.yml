@@ -223,7 +223,6 @@ jobs:
         run: cabal build --enable-tests --ghc-options="-Werror"
 
       - name: Test
-        if: runner.os != 'Windows'
         run: cabal test --enable-tests --ghc-options="-Werror" --test-show-details=streaming
 
       - name: Haddock

@@ -1,47 +1,48 @@
--- | PBR material system.
+-- | Pure render types shared between the test suite and the FFI layer.
 --
--- A 'Material' bundles up to five textures (albedo, normal,
--- metallic-roughness, AO, emissive) with scalar 'MaterialParams'.
--- Material parameters are packed into 64 bytes for push constants
--- (offset 64–127, after the model matrix).
---
--- @
--- let mat = defaultMaterial
---       { materialAlbedo = Just myTexture
---       , materialParams = defaultParams { paramRoughness = 0.8 }
---       }
---     pushData = packParams (materialParams mat)
--- @
-module NovaEngine.Render.Material
-  ( -- * Material
-    Material (..),
-    defaultMaterial,
+-- This module carries no native dependencies and lives in the
+-- @nova-pure@ internal library.  The FFI modules in
+-- @NovaEngine.Render.*@ re-export everything defined here so
+-- the public API is unchanged.
+module NovaEngine.Render.Types
+  ( -- * Texture handle
+    Texture (..),
 
-    -- * Parameters
+    -- * Material parameters
     MaterialParams (..),
     defaultParams,
     packParams,
 
-    -- * Default textures
-    DefaultTextures (..),
-    createDefaultTextures,
-    destroyDefaultTextures,
+    -- * Material
+    Material (..),
+    defaultMaterial,
+
+    -- * Skinned vertex
+    SkinnedVertex (..),
+
+    -- * Mip levels
+    calcMipLevels,
   )
 where
 
-import Data.Word (Word8)
+import Data.Bits (shiftR)
+import Data.Word (Word32)
+import Foreign.ForeignPtr (ForeignPtr)
 import Foreign.Ptr (Ptr, castPtr)
-import Foreign.Storable (Storable (..), peekElemOff, pokeElemOff)
-import NovaEngine.Math.Types (V2 (..), V4 (..))
-import NovaEngine.Render.Allocator (Allocator)
-import NovaEngine.Render.Device (Device)
-import NovaEngine.Render.Texture
-  ( Texture,
-    TextureFilter (..),
-    TextureWrap (..),
-    createTexture,
-    destroyTexture,
-  )
+import Foreign.Storable (Storable (..), peekByteOff, peekElemOff, pokeByteOff, pokeElemOff)
+import NovaEngine.Math.Types (V2 (..), V3, V4 (..))
+
+-- ----------------------------------------------------------------
+-- Texture handle
+-- ----------------------------------------------------------------
+
+-- | Opaque handle to a Vulkan texture (image + view + sampler).
+--
+-- Constructed by 'NovaEngine.Render.Texture.createTexture' and
+-- friends.  This type lives here (rather than in the FFI module)
+-- so that 'Material' can reference it without pulling in native
+-- dependencies.
+newtype Texture = Texture (ForeignPtr ())
 
 -- ----------------------------------------------------------------
 -- Material parameters
@@ -159,7 +160,8 @@ instance Storable MaterialParams where
 -- | A PBR material: optional textures + scalar parameters.
 --
 -- Missing textures ('Nothing') should be replaced with the
--- appropriate 'DefaultTextures' entry at bind time.
+-- appropriate 'NovaEngine.Render.Material.DefaultTextures' entry
+-- at bind time.
 data Material = Material
   { materialAlbedo :: !(Maybe Texture),
     materialNormal :: !(Maybe Texture),
@@ -182,43 +184,56 @@ defaultMaterial =
     }
 
 -- ----------------------------------------------------------------
--- Default textures
+-- Skinned vertex (80 bytes)
 -- ----------------------------------------------------------------
 
--- | Pre-created 1×1 fallback textures for missing material slots.
-data DefaultTextures = DefaultTextures
-  { defWhite :: !Texture,
-    defFlatNormal :: !Texture,
-    defBlack :: !Texture
+-- | GPU-ready vertex for skeletal animation.
+--
+-- 80 bytes: position(12) + normal(12) + uv(8) + tangent(16) +
+-- boneIndices(16) + boneWeights(16). No color attribute — the
+-- skinned shader uses white.
+data SkinnedVertex = SkinnedVertex
+  { skPosition :: !V3,
+    skNormal :: !V3,
+    skUV :: !V2,
+    skTangent :: !V4,
+    skBoneIndices :: !V4,
+    skBoneWeights :: !V4
   }
+  deriving (Show, Eq)
 
--- | Create the three default textures.
+instance Storable SkinnedVertex where
+  sizeOf _ = 80
+  alignment _ = 4
+  peek p = do
+    pos <- peekByteOff p 0
+    nrm <- peekByteOff p 12
+    uv <- peekByteOff p 24
+    tang <- peekByteOff p 32
+    idx <- peekByteOff p 48
+    wt <- peekByteOff p 64
+    pure (SkinnedVertex pos nrm uv tang idx wt)
+  poke p (SkinnedVertex pos nrm uv tang idx wt) = do
+    pokeByteOff p 0 pos
+    pokeByteOff p 12 nrm
+    pokeByteOff p 24 uv
+    pokeByteOff p 32 tang
+    pokeByteOff p 48 idx
+    pokeByteOff p 64 wt
+
+-- ----------------------------------------------------------------
+-- Mip levels
+-- ----------------------------------------------------------------
+
+-- | Compute the number of mip levels for given dimensions.
 --
--- * White (255,255,255,255) — for albedo and AO
--- * Flat normal (128,128,255,255) — tangent-space +Z
--- * Black (0,0,0,255) — for emissive
+-- @calcMipLevels 256 256 == 9@
 --
--- Returns 'Nothing' if any creation fails.
-createDefaultTextures ::
-  Device -> Allocator -> IO (Maybe DefaultTextures)
-createDefaultTextures dev alloc = do
-  mWhite <- mkSolid [255, 255, 255, 255]
-  mNormal <- mkSolid [128, 128, 255, 255]
-  mBlack <- mkSolid [0, 0, 0, 255]
-  case (mWhite, mNormal, mBlack) of
-    (Just w, Just n, Just b) ->
-      pure (Just (DefaultTextures w n b))
-    _ -> do
-      mapM_ (mapM_ destroyTexture) [mWhite, mNormal, mBlack]
-      pure Nothing
+-- @calcMipLevels 1 1 == 1@
+calcMipLevels :: Word32 -> Word32 -> Word32
+calcMipLevels w h
+  | w == 0 || h == 0 = 1
+  | otherwise = go 1 (max w h)
   where
-    mkSolid :: [Word8] -> IO (Maybe Texture)
-    mkSolid rgba =
-      createTexture dev alloc 1 1 rgba False FilterNearest WrapRepeat
-
--- | Destroy the default textures.
-destroyDefaultTextures :: DefaultTextures -> IO ()
-destroyDefaultTextures defs = do
-  destroyTexture (defWhite defs)
-  destroyTexture (defFlatNormal defs)
-  destroyTexture (defBlack defs)
+    go !levels 1 = levels
+    go !levels d = go (levels + 1) (d `shiftR` 1)

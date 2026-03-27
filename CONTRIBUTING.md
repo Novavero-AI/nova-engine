@@ -4,6 +4,26 @@
 
 nova-engine is a 3D graphics engine. C99 hot path for Vulkan rendering, SDL3 windowing, and VMA memory management. Haskell brain for mesh generation, animation, terrain, and frame orchestration.
 
+### Library Structure
+
+The package contains two cabal libraries:
+
+- **`nova-pure`** (internal, `src/`) — 49 pure Haskell modules. No C sources, no `pkgconfig-depends`, no native dependencies. Tests depend only on this.
+- **`nova-engine`** (public, `src-ffi/`) — 19 FFI modules wrapping the C99 layer, plus `reexported-modules` for everything in `nova-pure`. External consumers depend on this and get the full API.
+
+```
+src/          ← nova-pure: pure Haskell (math, mesh, animation, physics, scene, ...)
+src-ffi/      ← nova-engine: FFI wrappers (Render.*, Input, Debug)
+cbits/        ← C99 + C++ source (nv_*.c, nv_vma.cpp)
+test/         ← QuickCheck tests (depends on nova-pure only)
+shaders/      ← GLSL vertex/fragment/compute
+```
+
+When adding a new module, decide which library it belongs to:
+
+- **Pure logic** (no `foreign import`, no IO for GPU) → add to `nova-pure` in the cabal file, put source in `src/`.
+- **FFI wrapper** (calls C, needs Vulkan/SDL3) → add to the main library, put source in `src-ffi/`.
+
 ### Module Structure
 
 ```
@@ -61,7 +81,10 @@ NovaEngine.Animation.Morph        -- blend shapes
 -- Spatial (queries)
 NovaEngine.Spatial.Raycast        -- ray-triangle, BVH
 
--- Render (C99 hot path via FFI)
+-- Render (pure types, in nova-pure)
+NovaEngine.Render.Types           -- Texture, Material, MaterialParams, SkinnedVertex, calcMipLevels
+
+-- Render (C99 hot path via FFI, in src-ffi/)
 NovaEngine.Render.Window          -- SDL3 window, Vulkan surface, events
 NovaEngine.Render.Instance        -- VkInstance, validation, GPU selection
 NovaEngine.Render.Device          -- logical device, queues, command pool
