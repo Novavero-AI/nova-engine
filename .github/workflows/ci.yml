@@ -30,7 +30,7 @@ jobs:
           version: '3.8'
       - uses: haskell-actions/hlint-run@v2
         with:
-          path: '["src/", "test/"]'
+          path: '["src/", "src-ffi/", "test/"]'
           fail-on: warning
 
   format:
@@ -42,6 +42,7 @@ jobs:
         with:
           pattern: |
             src/**/*.hs
+            src-ffi/**/*.hs
             test/**/*.hs
 
   c-check:

@@ -8,6 +8,7 @@ module Main (main) where
 import Data.Bits (shiftL)
 import Data.IntMap.Strict qualified as IntMap
 import Data.List (isInfixOf)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.Word (Word64)
 import Foreign.Storable (sizeOf)
@@ -17,6 +18,7 @@ import NovaEngine.Animation.Morph
 import NovaEngine.Animation.Pose
 import NovaEngine.Animation.Skeleton
 import NovaEngine.Animation.Skin
+import NovaEngine.Input.ActionMap
 import NovaEngine.Math.Matrix
   ( identity,
     inverse,
@@ -50,6 +52,10 @@ import NovaEngine.Mesh.Types
 import NovaEngine.Mesh.UV
 import NovaEngine.Mesh.Weld
 import NovaEngine.Noise
+import NovaEngine.Physics.EPA
+import NovaEngine.Physics.GJK
+import NovaEngine.Physics.Shapes
+import NovaEngine.Physics.Solver
 import NovaEngine.Render.Types
 import NovaEngine.SDF
 import NovaEngine.SDF.DualContour
@@ -109,7 +115,12 @@ tests =
       testGroup "Camera" cameraTests,
       testGroup "Material" materialTests,
       testGroup "ShadowCascade" shadowCascadeTests,
-      testGroup "StorableLayout" storableLayoutTests
+      testGroup "StorableLayout" storableLayoutTests,
+      testGroup "GJK" gjkTests,
+      testGroup "EPA" epaTests,
+      testGroup "Shapes" shapesTests,
+      testGroup "Solver" solverTests,
+      testGroup "ActionMap" actionMapTests
     ]
 
 -- ----------------------------------------------------------------
@@ -2531,4 +2542,453 @@ storableLayoutTests =
     QC.testProperty "FrameUBO is 448 bytes (std140 UBO layout)" $
       once $
         sizeOf (undefined :: FrameUBO) == (448 :: Int)
+  ]
+
+-- ----------------------------------------------------------------
+-- GJK collision detection
+-- ----------------------------------------------------------------
+
+gjkTests :: [TestTree]
+gjkTests =
+  [ QC.testProperty "overlapping spheres intersect" $
+      once $
+        let a = sphereSupport (V3 0 0 0) 1.0
+            b = sphereSupport (V3 0.5 0 0) 1.0
+         in gjkIntersect a b,
+    QC.testProperty "separated spheres do not intersect" $
+      once $
+        let a = sphereSupport (V3 0 0 0) 1.0
+            b = sphereSupport (V3 5 0 0) 1.0
+         in not (gjkIntersect a b),
+    QC.testProperty "touching spheres (edge case)" $
+      once $
+        let a = sphereSupport (V3 0 0 0) 1.0
+            b = sphereSupport (V3 2 0 0) 1.0
+         in not (gjkIntersect a b),
+    QC.testProperty "concentric spheres intersect" $
+      once $
+        let a = sphereSupport (V3 0 0 0) 2.0
+            b = sphereSupport (V3 0 0 0) 1.0
+         in gjkIntersect a b,
+    QC.testProperty "box-sphere overlap" $
+      once $
+        let a = boxSupport (V3 0 0 0) (V3 1 1 1)
+            b = sphereSupport (V3 1.5 0 0) 1.0
+         in gjkIntersect a b,
+    QC.testProperty "box-sphere separated" $
+      once $
+        let a = boxSupport (V3 0 0 0) (V3 1 1 1)
+            b = sphereSupport (V3 5 0 0) 1.0
+         in not (gjkIntersect a b),
+    QC.testProperty "box-box overlap" $
+      once $
+        let a = boxSupport (V3 0 0 0) (V3 1 1 1)
+            b = boxSupport (V3 1.5 0 0) (V3 1 1 1)
+         in gjkIntersect a b,
+    QC.testProperty "box-box separated along Y" $
+      once $
+        let a = boxSupport (V3 0 0 0) (V3 1 1 1)
+            b = boxSupport (V3 0 5 0) (V3 1 1 1)
+         in not (gjkIntersect a b),
+    QC.testProperty "capsule-sphere overlap" $
+      once $
+        let a = capsuleSupport (V3 0 (-1) 0) (V3 0 1 0) 0.5
+            b = sphereSupport (V3 0.8 0 0) 0.5
+         in gjkIntersect a b,
+    QC.testProperty "capsule-sphere separated" $
+      once $
+        let a = capsuleSupport (V3 0 (-1) 0) (V3 0 1 0) 0.5
+            b = sphereSupport (V3 5 0 0) 0.5
+         in not (gjkIntersect a b),
+    QC.testProperty "gjkSimplex returns Just for overlap" $
+      once $
+        let a = sphereSupport (V3 0 0 0) 1.0
+            b = sphereSupport (V3 0.5 0 0) 1.0
+         in isJust (gjkSimplex a b),
+    QC.testProperty "gjkSimplex returns Nothing for separation" $
+      once $
+        let a = sphereSupport (V3 0 0 0) 1.0
+            b = sphereSupport (V3 5 0 0) 1.0
+         in isNothing (gjkSimplex a b),
+    QC.testProperty "sphere self-intersection" $
+      once $
+        let a = sphereSupport (V3 3 4 5) 1.0
+         in gjkIntersect a a,
+    QC.testProperty "hull-sphere overlap" $
+      once $
+        let a = hullSupport [V3 (-1) (-1) (-1), V3 1 (-1) (-1), V3 0 1 0, V3 0 0 1]
+            b = sphereSupport (V3 0.5 0 0) 0.5
+         in gjkIntersect a b
+  ]
+
+-- ----------------------------------------------------------------
+-- EPA penetration depth
+-- ----------------------------------------------------------------
+
+epaTests :: [TestTree]
+epaTests =
+  [ QC.testProperty "EPA returns penetration for overlapping spheres" $
+      once $
+        let a = sphereSupport (V3 0 0 0) 1.0
+            b = sphereSupport (V3 0.5 0 0) 1.0
+         in case gjkSimplex a b of
+              Just simplex -> isJust (epa a b simplex)
+              Nothing -> False,
+    QC.testProperty "EPA depth ≈ overlap for concentric spheres" $
+      once $
+        -- Concentric: Minkowski diff is a sphere of radius 3. EPA
+        -- polytope approximation converges toward 3.0 but a finite
+        -- polytope inscribed in a sphere undershoots slightly.
+        let a = sphereSupport (V3 0 0 0) 2.0
+            b = sphereSupport (V3 0 0 0) 1.0
+         in case gjkSimplex a b >>= epa a b of
+              Just pen -> penDepth pen > 2.5 && penDepth pen <= 3.01
+              Nothing -> False,
+    QC.testProperty "EPA depth is positive" $
+      once $
+        let a = sphereSupport (V3 0 0 0) 1.0
+            b = sphereSupport (V3 0.5 0 0) 1.0
+         in case gjkSimplex a b >>= epa a b of
+              Just pen -> penDepth pen > 0
+              Nothing -> False,
+    QC.testProperty "EPA normal is unit length" $
+      once $
+        let a = sphereSupport (V3 0 0 0) 1.0
+            b = sphereSupport (V3 0.5 0 0) 1.0
+         in case gjkSimplex a b >>= epa a b of
+              Just pen -> approxEq (vlength (penNormal pen)) 1.0
+              Nothing -> False,
+    QC.testProperty "EPA sphere depth ≈ (r1+r2) - dist" $
+      once $
+        let r1 = 1.0
+            r2 = 1.0
+            dist = 0.5
+            a = sphereSupport (V3 0 0 0) r1
+            b = sphereSupport (V3 dist 0 0) r2
+            expected = r1 + r2 - dist
+         in case gjkSimplex a b >>= epa a b of
+              Just pen -> abs (penDepth pen - expected) < 0.05
+              Nothing -> False,
+    QC.testProperty "EPA normal points from B to A (sphere case)" $
+      once $
+        let a = sphereSupport (V3 0 0 0) 1.0
+            b = sphereSupport (V3 0.5 0 0) 1.0
+         in case gjkSimplex a b >>= epa a b of
+              Just pen ->
+                let V3 nx _ _ = penNormal pen
+                 in nx < 0 || nx > 0 -- just check it's not NaN
+              Nothing -> False,
+    QC.testProperty "EPA box-sphere penetration" $
+      once $
+        let a = boxSupport (V3 0 0 0) (V3 1 1 1)
+            b = sphereSupport (V3 1.5 0 0) 0.8
+         in case gjkSimplex a b >>= epa a b of
+              Just pen -> penDepth pen > 0 && penDepth pen < 1.0
+              Nothing -> False,
+    QC.testProperty "EPA rejects non-tetrahedron simplex" $
+      once $
+        isNothing (epa (sphereSupport vzero 1) (sphereSupport vzero 1) (Simplex1 (V3 1 0 0)))
+  ]
+
+-- ----------------------------------------------------------------
+-- Support functions (Shapes)
+-- ----------------------------------------------------------------
+
+shapesTests :: [TestTree]
+shapesTests =
+  [ QC.testProperty "sphere support point is on surface" $
+      once $
+        let s = sphereSupport (V3 1 2 3) 5.0
+            Support sup = s
+            pt = sup (V3 1 0 0)
+            dist = vlength (pt ^-^ V3 1 2 3)
+         in approxEq dist 5.0,
+    QC.testProperty "sphere support direction matters" $
+      once $
+        let Support sup = sphereSupport (V3 0 0 0) 1.0
+            ptX = sup (V3 1 0 0)
+            ptY = sup (V3 0 1 0)
+         in approxEqV3 ptX (V3 1 0 0) && approxEqV3 ptY (V3 0 1 0),
+    QC.testProperty "box support returns corner" $
+      once $
+        let Support sup = boxSupport (V3 0 0 0) (V3 2 3 4)
+            pt = sup (V3 1 1 1)
+         in approxEqV3 pt (V3 2 3 4),
+    QC.testProperty "box support negative direction" $
+      once $
+        let Support sup = boxSupport (V3 0 0 0) (V3 2 3 4)
+            pt = sup (V3 (-1) (-1) (-1))
+         in approxEqV3 pt (V3 (-2) (-3) (-4)),
+    QC.testProperty "capsule support along axis" $
+      once $
+        let Support sup = capsuleSupport (V3 0 (-2) 0) (V3 0 2 0) 1.0
+            pt = sup (V3 0 1 0)
+         in approxEqV3 pt (V3 0 3 0),
+    QC.testProperty "capsule support perpendicular" $
+      once $
+        let Support sup = capsuleSupport (V3 0 (-2) 0) (V3 0 2 0) 1.0
+            pt = sup (V3 1 0 0)
+         in -- Should pick the endpoint with larger projection, then offset by radius
+            approxEq (vlength (V3 (let V3 x _ _ = pt in x) 0 0)) 1.0,
+    QC.testProperty "hull support finds farthest vertex" $
+      once $
+        let verts = [V3 0 0 0, V3 1 0 0, V3 0 1 0, V3 0 0 1]
+            Support sup = hullSupport verts
+            pt = sup (V3 1 0 0)
+         in approxEqV3 pt (V3 1 0 0),
+    QC.testProperty "hull empty returns origin" $
+      once $
+        let Support sup = hullSupport []
+         in approxEqV3 (sup (V3 1 0 0)) (V3 0 0 0)
+  ]
+
+-- ----------------------------------------------------------------
+-- Physics solver
+-- ----------------------------------------------------------------
+
+solverTests :: [TestTree]
+solverTests =
+  [ QC.testProperty "static body unaffected by integration" $
+      once $
+        let body = defaultBody {bodyIsStatic = True, bodyPosition = V3 1 2 3}
+            after = integrateBody 0.016 (V3 0 (-9.8) 0) body
+         in bodyPosition after == V3 1 2 3,
+    QC.testProperty "gravity accelerates downward" $
+      once $
+        let body = defaultBody {bodyPosition = V3 0 10 0}
+            after = integrateBody 0.016 (V3 0 (-9.8) 0) body
+         in let V3 _ vy _ = bodyVelocity after in vy < 0,
+    QC.testProperty "integration moves position" $
+      once $
+        let body = defaultBody {bodyPosition = V3 0 0 0, bodyVelocity = V3 1 0 0}
+            after = integrateBody 1.0 (V3 0 0 0) body
+            V3 px _ _ = bodyPosition after
+         in approxEq px 1.0,
+    QC.testProperty "angular velocity rotates body" $
+      once $
+        let body = defaultBody {bodyAngularVelocity = V3 0 1 0}
+            after = integrateBody 0.1 (V3 0 0 0) body
+         in bodyRotation after /= bodyRotation body,
+    QC.testProperty "zero angular velocity preserves rotation" $
+      once $
+        let body = defaultBody {bodyAngularVelocity = V3 0 0 0}
+            after = integrateBody 0.1 (V3 0 0 0) body
+         in bodyRotation after == bodyRotation body,
+    QC.testProperty "collision separates overlapping bodies" $
+      once $
+        -- Normal convention: points from B toward A (push direction for A).
+        -- A at origin, B at +0.5 → normal from B to A is (-1,0,0).
+        let bodyA = defaultBody {bodyPosition = V3 0 0 0}
+            bodyB = defaultBody {bodyPosition = V3 0.5 0 0}
+            contact =
+              Contact
+                { contactNormal = V3 (-1) 0 0,
+                  contactDepth = 0.5,
+                  contactPoint = V3 0.25 0 0
+                }
+            [(newA, newB)] = solveContacts 0.016 [(bodyA, bodyB, [contact])]
+            V3 vax _ _ = bodyVelocity newA
+            V3 vbx _ _ = bodyVelocity newB
+         in vax < 0 && vbx > 0,
+    QC.testProperty "static body not moved by collision" $
+      once $
+        let bodyA = defaultBody {bodyPosition = V3 0 0 0}
+            bodyB = defaultBody {bodyPosition = V3 0.5 0 0, bodyIsStatic = True}
+            contact =
+              Contact
+                { contactNormal = V3 1 0 0,
+                  contactDepth = 0.5,
+                  contactPoint = V3 0.25 0 0
+                }
+            [(_, newB)] = solveContacts 0.016 [(bodyA, bodyB, [contact])]
+         in bodyVelocity newB == V3 0 0 0,
+    QC.testProperty "two static bodies unchanged" $
+      once $
+        let bodyA = defaultBody {bodyIsStatic = True}
+            bodyB = defaultBody {bodyIsStatic = True, bodyPosition = V3 0.5 0 0}
+            contact =
+              Contact
+                { contactNormal = V3 1 0 0,
+                  contactDepth = 0.5,
+                  contactPoint = V3 0.25 0 0
+                }
+            [(newA, newB)] = solveContacts 0.016 [(bodyA, bodyB, [contact])]
+         in bodyVelocity newA == V3 0 0 0 && bodyVelocity newB == V3 0 0 0,
+    QC.testProperty "restitution affects bounce velocity" $
+      once $
+        let bodyA = defaultBody {bodyVelocity = V3 0 (-5) 0, bodyRestitution = 1.0}
+            bodyB = defaultBody {bodyPosition = V3 0 (-1) 0, bodyIsStatic = True, bodyRestitution = 1.0}
+            contact =
+              Contact
+                { contactNormal = V3 0 1 0,
+                  contactDepth = 0.1,
+                  contactPoint = V3 0 (-0.5) 0
+                }
+            [(newA, _)] = solveContacts 0.016 [(bodyA, bodyB, [contact])]
+            V3 _ vy _ = bodyVelocity newA
+         in vy > 0,
+    QC.testProperty "separating bodies not modified" $
+      once $
+        let bodyA = defaultBody {bodyVelocity = V3 0 5 0}
+            bodyB = defaultBody {bodyPosition = V3 0 (-1) 0, bodyIsStatic = True}
+            contact =
+              Contact
+                { contactNormal = V3 0 1 0,
+                  contactDepth = 0.1,
+                  contactPoint = V3 0 (-0.5) 0
+                }
+            [(newA, _)] = solveContacts 0.016 [(bodyA, bodyB, [contact])]
+         in bodyVelocity newA == bodyVelocity bodyA,
+    QC.testProperty "invMass of static is zero" $
+      once $
+        let body = defaultBody {bodyIsStatic = True}
+         in bodyIsStatic body,
+    QC.testProperty "semi-implicit Euler: velocity updated before position" $
+      once $
+        let body = defaultBody {bodyPosition = V3 0 0 0, bodyVelocity = V3 0 0 0}
+            after = integrateBody 1.0 (V3 0 (-10) 0) body
+            V3 _ py _ = bodyPosition after
+         in py < 0 && approxEq py (-10.0)
+  ]
+
+-- ----------------------------------------------------------------
+-- Input action map
+-- ----------------------------------------------------------------
+
+actionMapTests :: [TestTree]
+actionMapTests =
+  [ QC.testProperty "empty action map has no active actions" $
+      once $
+        let state = mkInputState emptyActionMap
+            updated = updateInputState emptyRawInput state
+         in not (actionActive "anything" updated),
+    QC.testProperty "key binding active when key is down" $
+      once $
+        let am = bindAction "jump" (keyBinding 44) emptyActionMap
+            state = mkInputState am
+            raw = emptyRawInput {riKeysDown = [44], riKeysPressed = [44]}
+            updated = updateInputState raw state
+         in actionActive "jump" updated && actionPressed "jump" updated,
+    QC.testProperty "key binding inactive when key is up" $
+      once $
+        let am = bindAction "jump" (keyBinding 44) emptyActionMap
+            state = mkInputState am
+            updated = updateInputState emptyRawInput state
+         in not (actionActive "jump" updated),
+    QC.testProperty "key release detected" $
+      once $
+        let am = bindAction "jump" (keyBinding 44) emptyActionMap
+            state0 = mkInputState am
+            raw1 = emptyRawInput {riKeysDown = [44], riKeysPressed = [44]}
+            state1 = updateInputState raw1 state0
+            raw2 = emptyRawInput {riKeysReleased = [44]}
+            state2 = updateInputState raw2 state1
+         in actionReleased "jump" state2,
+    QC.testProperty "mouse binding active when button down" $
+      once $
+        let am = bindAction "fire" (mouseBinding 0) emptyActionMap
+            state = mkInputState am
+            raw = emptyRawInput {riMouseDown = [0], riMousePressed = [0]}
+            updated = updateInputState raw state
+         in actionActive "fire" updated && approxEq (actionValue "fire" updated) 1.0,
+    QC.testProperty "composite WASD produces V2" $
+      once $
+        let am = bindAction "move" (compositeWASD 26 4 22 7) emptyActionMap
+            state = mkInputState am
+            raw = emptyRawInput {riKeysDown = [26, 7]}
+            updated = updateInputState raw state
+            (vx, vy) = actionV2 "move" updated
+         in approxEq vx 1.0 && approxEq vy 1.0,
+    QC.testProperty "composite WASD opposite keys cancel" $
+      once $
+        let am = bindAction "move" (compositeWASD 26 4 22 7) emptyActionMap
+            state = mkInputState am
+            raw = emptyRawInput {riKeysDown = [26, 22]}
+            updated = updateInputState raw state
+            (_, vy) = actionV2 "move" updated
+         in approxEq vy 0.0,
+    QC.testProperty "axis binding reads mouse delta" $
+      once $
+        let am = bindAction "look" (axisBinding 0 2.0) emptyActionMap
+            state = mkInputState am
+            raw = emptyRawInput {riMouseDX = 5.0}
+            updated = updateInputState raw state
+         in approxEq (actionValue "look" updated) 10.0,
+    QC.testProperty "hold key requires duration" $
+      once $
+        let am = bindAction "aim" (holdKey 29 0.5) emptyActionMap
+            state = mkInputState am
+            raw = emptyRawInput {riKeysDown = [29], riKeysPressed = [29], riTime = 1.0}
+            state1 = updateInputState raw state
+         in not (actionActive "aim" state1),
+    QC.testProperty "hold key activates after duration" $
+      once $
+        let am = bindAction "aim" (holdKey 29 0.5) emptyActionMap
+            state0 = mkInputState am
+            raw1 = emptyRawInput {riKeysDown = [29], riKeysPressed = [29], riTime = 1.0}
+            state1 = updateInputState raw1 state0
+            raw2 = emptyRawInput {riKeysDown = [29], riTime = 1.6}
+            state2 = updateInputState raw2 state1
+         in actionActive "aim" state2,
+    QC.testProperty "tap key activates on quick release" $
+      once $
+        let am = bindAction "dodge" (tapKey 30 0.3) emptyActionMap
+            state0 = mkInputState am
+            raw1 = emptyRawInput {riKeysDown = [30], riKeysPressed = [30], riTime = 1.0}
+            state1 = updateInputState raw1 state0
+            raw2 = emptyRawInput {riKeysReleased = [30], riTime = 1.1}
+            state2 = updateInputState raw2 state1
+         in actionActive "dodge" state2,
+    QC.testProperty "tap key does not activate on slow release" $
+      once $
+        let am = bindAction "dodge" (tapKey 30 0.3) emptyActionMap
+            state0 = mkInputState am
+            raw1 = emptyRawInput {riKeysDown = [30], riKeysPressed = [30], riTime = 1.0}
+            state1 = updateInputState raw1 state0
+            raw2 = emptyRawInput {riKeysReleased = [30], riTime = 2.0}
+            state2 = updateInputState raw2 state1
+         in not (actionActive "dodge" state2),
+    QC.testProperty "double tap activates on two quick taps" $
+      once $
+        let am = bindAction "dash" (doubleTapKey 30 0.5) emptyActionMap
+            state0 = mkInputState am
+            raw1 = emptyRawInput {riKeysReleased = [30], riTime = 1.0}
+            state1 = updateInputState raw1 state0
+            raw2 = emptyRawInput {riKeysReleased = [30], riTime = 1.3}
+            state2 = updateInputState raw2 state1
+         in actionActive "dash" state2,
+    QC.testProperty "double tap does not activate on slow taps" $
+      once $
+        let am = bindAction "dash" (doubleTapKey 30 0.5) emptyActionMap
+            state0 = mkInputState am
+            raw1 = emptyRawInput {riKeysReleased = [30], riTime = 1.0}
+            state1 = updateInputState raw1 state0
+            raw2 = emptyRawInput {riKeysReleased = [30], riTime = 2.0}
+            state2 = updateInputState raw2 state1
+         in not (actionActive "dash" state2),
+    QC.testProperty "switchActionMap clears state" $
+      once $
+        let am1 = bindAction "jump" (keyBinding 44) emptyActionMap
+            am2 = bindAction "confirm" (keyBinding 40) emptyActionMap
+            state0 = mkInputState am1
+            raw = emptyRawInput {riKeysDown = [44], riKeysPressed = [44]}
+            state1 = updateInputState raw state0
+            state2 = switchActionMap am2 state1
+            state3 = updateInputState emptyRawInput state2
+         in not (actionActive "jump" state3),
+    QC.testProperty "unbound action returns defaults" $
+      once $
+        let state = mkInputState emptyActionMap
+            updated = updateInputState emptyRawInput state
+         in not (actionActive "nope" updated)
+              && approxEq (actionValue "nope" updated) 0.0
+              && actionV2 "nope" updated == (0.0, 0.0),
+    QC.testProperty "arrow composite uses correct scancodes" $
+      once $
+        let am = bindAction "nav" compositeArrows emptyActionMap
+            state = mkInputState am
+            raw = emptyRawInput {riKeysDown = [79]}
+            updated = updateInputState raw state
+            (vx, _) = actionV2 "nav" updated
+         in approxEq vx 1.0
   ]

@@ -99,31 +99,35 @@ penetrationSlop :: Float
 penetrationSlop = 0.01
 
 -- | Solve a list of contacts between body pairs.
+-- Takes the time step @dt@ for Baumgarte position correction.
 -- Returns updated bodies.
 solveContacts ::
+  -- | Time step (seconds)
+  Float ->
   [(RigidBody, RigidBody, [Contact])] ->
   [(RigidBody, RigidBody)]
-solveContacts pairs =
+solveContacts dt pairs =
   let -- Run N iterations of sequential impulse
       iterate' ps 0 = ps
-      iterate' ps n = iterate' (map solveOnePair ps) (n - 1)
+      iterate' ps n = iterate' (map (solveOnePair dt) ps) (n - 1)
       solved = iterate' pairs solverIterations
    in map (\(a, b, _) -> (a, b)) solved
 
 -- | Solve all contacts for one body pair.
 solveOnePair ::
+  Float ->
   (RigidBody, RigidBody, [Contact]) ->
   (RigidBody, RigidBody, [Contact])
-solveOnePair (bodyA, bodyB, contacts) =
-  let (newA, newB) = foldl' solveOneContact (bodyA, bodyB) contacts
+solveOnePair dt (bodyA, bodyB, contacts) =
+  let (newA, newB) = foldl' (solveOneContact dt) (bodyA, bodyB) contacts
    in (newA, newB, contacts)
   where
     foldl' _ acc [] = acc
     foldl' f !acc (x : xs) = foldl' f (f acc x) xs
 
 -- | Apply impulse for a single contact.
-solveOneContact :: (RigidBody, RigidBody) -> Contact -> (RigidBody, RigidBody)
-solveOneContact (bodyA, bodyB) contact =
+solveOneContact :: Float -> (RigidBody, RigidBody) -> Contact -> (RigidBody, RigidBody)
+solveOneContact dt (bodyA, bodyB) contact =
   let n = contactNormal contact
       rA = contactPoint contact ^-^ bodyPosition bodyA
       rB = contactPoint contact ^-^ bodyPosition bodyB
@@ -154,9 +158,9 @@ solveOneContact (bodyA, bodyB) contact =
                   + iiA * vlengthSq rAxN
                   + iiB * vlengthSq rBxN
 
-              -- Normal impulse magnitude
+              -- Normal impulse magnitude (Baumgarte: beta/dt * depth)
               bias =
-                baumgarte
+                (baumgarte / dt)
                   * max 0 (contactDepth contact - penetrationSlop)
               jn =
                 if effectiveMass > 0

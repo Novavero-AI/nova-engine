@@ -19,7 +19,7 @@ module NovaEngine.Physics.GJK
 where
 
 import NovaEngine.Math.Types
-import NovaEngine.Math.Vector (cross, dot)
+import NovaEngine.Math.Vector (cross, dot, vlengthSq)
 
 -- ----------------------------------------------------------------
 -- Support function
@@ -61,8 +61,10 @@ gjkIntersect a b = case gjkSimplex a b of
 -- The simplex is needed by EPA to compute penetration depth.
 gjkSimplex :: Support -> Support -> Maybe Simplex
 gjkSimplex (Support supA) (Support supB) =
-  let -- Initial direction: arbitrary (X axis)
-      d0 = V3 1 0 0
+  let -- Initial direction: (1,1,1) normalised. Off-axis to avoid
+      -- degenerate GJK simplices when shapes are axis-aligned.
+      inv3 = 1.0 / sqrt 3.0
+      d0 = V3 inv3 inv3 inv3
       -- First Minkowski difference support point
       s0 = supA d0 ^-^ supB (negateDir d0)
    in if dot s0 d0 <= 0
@@ -95,7 +97,12 @@ doSimplex (Simplex2 a b) =
   let ab = b ^-^ a
       ao = negateDir a
    in if dot ab ao > 0
-        then (Simplex2 a b, cross (cross ab ao) ab, False)
+        then
+          let d = tripleProduct ab ao ab
+           in if vlengthSq d < 1.0e-12
+                then -- Origin is on line AB; pick any perpendicular.
+                  (Simplex2 a b, perpTo ab, False)
+                else (Simplex2 a b, d, False)
         else (Simplex1 a, ao, False)
 doSimplex (Simplex3 a b c) =
   doTriangle a b c
@@ -131,7 +138,11 @@ doLine a b =
   let ab = b ^-^ a
       ao = negateDir a
    in if dot ab ao > 0
-        then (Simplex2 a b, cross (cross ab ao) ab, False)
+        then
+          let d = tripleProduct ab ao ab
+           in if vlengthSq d < 1.0e-12
+                then (Simplex2 a b, perpTo ab, False)
+                else (Simplex2 a b, d, False)
         else (Simplex1 a, ao, False)
 
 -- | Tetrahedron case: check which face the origin is beyond.
@@ -165,6 +176,21 @@ addPoint (Simplex1 b) a = Simplex2 a b
 addPoint (Simplex2 b c) a = Simplex3 a b c
 addPoint (Simplex3 b c d) a = Simplex4 a b c d
 addPoint (Simplex4 _ c d e) a = Simplex4 a c d e
+
+-- | Triple product: @cross (cross a b) c@.
+tripleProduct :: V3 -> V3 -> V3 -> V3
+tripleProduct a b = cross (cross a b)
+
+-- | An arbitrary vector perpendicular to the given vector.
+-- Uses off-axis reference vectors to avoid producing axis-aligned
+-- results that would cause EPA face degeneracy.
+perpTo :: V3 -> V3
+perpTo v@(V3 x y z)
+  -- Pick the reference vector least parallel to v, using
+  -- off-axis directions to keep the result non-axis-aligned.
+  | abs x <= abs y && abs x <= abs z = cross v (V3 1 0.1 0.1)
+  | abs y <= abs z = cross v (V3 0.1 1 0.1)
+  | otherwise = cross v (V3 0.1 0.1 1)
 
 -- | Negate a direction vector.
 negateDir :: V3 -> V3

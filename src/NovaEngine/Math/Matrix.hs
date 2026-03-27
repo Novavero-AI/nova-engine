@@ -125,7 +125,7 @@ ortho l r b t near far =
       m11 = -(2.0 / (t - b)) -- Vulkan Y-flip
       m22 = 1.0 / (near - far) -- Vulkan depth [0,1]
       m30 = -((r + l) / (r - l))
-      m31 = -((t + b) / (t - b))
+      m31 = (t + b) / (t - b)
       m32 = near / (near - far)
    in M44
         (V4 m00 0 0 0)
