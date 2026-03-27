@@ -47,7 +47,7 @@ foreign import ccall unsafe "nv_device_create"
 foreign import ccall unsafe "&nv_device_destroy"
   c_nv_device_destroy :: FunPtr (Ptr () -> IO ())
 
-foreign import ccall unsafe "nv_device_wait_idle"
+foreign import ccall safe "nv_device_wait_idle"
   c_nv_device_wait_idle :: Ptr () -> IO ()
 
 -- ----------------------------------------------------------------

@@ -92,19 +92,19 @@ foreign import ccall unsafe "nv_frame_create"
 foreign import ccall unsafe "&nv_frame_destroy"
   c_nv_frame_destroy :: FunPtr (Ptr () -> IO ())
 
-foreign import ccall unsafe "nv_frame_begin"
+foreign import ccall safe "nv_frame_begin"
   c_nv_frame_begin :: Ptr () -> Ptr () -> Ptr () -> IO CInt
 
-foreign import ccall unsafe "nv_frame_acquire"
+foreign import ccall safe "nv_frame_acquire"
   c_nv_frame_acquire :: Ptr () -> Ptr () -> IO CInt
 
 foreign import ccall unsafe "nv_frame_begin_render_pass"
   c_nv_frame_begin_render_pass :: Ptr () -> Ptr () -> Ptr () -> IO ()
 
-foreign import ccall unsafe "nv_frame_end"
+foreign import ccall safe "nv_frame_end"
   c_nv_frame_end :: Ptr () -> Ptr () -> IO CInt
 
-foreign import ccall unsafe "nv_frame_submit"
+foreign import ccall safe "nv_frame_submit"
   c_nv_frame_submit :: Ptr () -> Ptr () -> IO CInt
 
 foreign import ccall unsafe "nv_frame_push_constants"

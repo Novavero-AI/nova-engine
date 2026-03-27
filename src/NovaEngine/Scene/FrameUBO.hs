@@ -51,7 +51,7 @@ data FrameUBO = FrameUBO
 
 instance Storable FrameUBO where
   sizeOf _ = 448
-  alignment _ = 4
+  alignment _ = 16
   peek p = do
     v <- peekByteOff p 0
     proj <- peekByteOff p 64

@@ -71,6 +71,33 @@ NovaEngine.Render.Pipeline        -- render pass, graphics pipeline, framebuffer
 NovaEngine.Render.Buffer          -- VMA-backed vertex/index buffer upload
 NovaEngine.Render.Frame           -- frame-in-flight sync, command recording
 NovaEngine.Render.Descriptor      -- descriptor set layouts, pools, writes
+NovaEngine.Render.Texture         -- texture creation, mipmaps, sampling
+NovaEngine.Render.Material        -- PBR material params + Storable packing
+NovaEngine.Render.Shadow          -- cascaded shadow map resources
+NovaEngine.Render.PostProcess     -- HDR framebuffer, bloom, tonemap, FXAA
+NovaEngine.Render.Skin            -- skinned vertex type, bone matrix upload
+NovaEngine.Render.SkinPipeline    -- skinned mesh graphics pipeline
+NovaEngine.Render.Compute         -- Vulkan compute pipeline
+NovaEngine.Render.Terrain         -- terrain graphics pipeline
+
+-- Input (C99 via FFI)
+NovaEngine.Input                  -- SDL3 input polling, raw state queries
+NovaEngine.Input.ActionMap        -- pure Haskell action mapping layer
+
+-- Debug (C99 via FFI)
+NovaEngine.Debug                  -- debug line rendering, GPU timestamp profiling
+
+-- Physics (pure Haskell)
+NovaEngine.Physics.GJK            -- GJK collision detection
+NovaEngine.Physics.EPA            -- EPA penetration depth
+NovaEngine.Physics.Shapes         -- collision shape support functions
+NovaEngine.Physics.Solver         -- sequential impulse constraint solver
+
+-- Scene (pure Haskell + UBO upload)
+NovaEngine.Scene                  -- entity management, transform hierarchy
+NovaEngine.Scene.Camera           -- camera types, view/projection matrices
+NovaEngine.Scene.FrameUBO         -- per-frame uniform buffer (std140)
+NovaEngine.Scene.Shadow           -- cascade split computation, light-space fitting
 ```
 
 ### C99 Layer (`cbits/`)
@@ -121,7 +148,7 @@ Use the `vertex` smart constructor for default white color. Use the `Vertex` con
 
 ### Dependencies
 
-**Haskell:** `base`, `bytestring`, `text`, `containers`, `array`
+**Haskell:** `base`, `containers`, `array`
 
 **System:** `libvulkan`, `libSDL3` (via pkg-config)
 

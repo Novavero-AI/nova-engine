@@ -17,7 +17,7 @@ layout(location = 2) out vec4 fragColor;
 
 void main() {
     gl_Position = pc.mvp * vec4(inPosition, 1.0);
-    fragNormal  = normalize(mat3(pc.model) * inNormal);
+    fragNormal  = normalize(transpose(inverse(mat3(pc.model))) * inNormal);
     fragUV      = inUV;
     fragColor   = inColor;
 }

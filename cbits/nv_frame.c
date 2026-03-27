@@ -186,20 +186,11 @@ int nv_frame_begin(NvFrame *fr, NvSwapchain *sc, NvPipeline *pip) {
     return 1;
 }
 
-int nv_frame_end(NvFrame *fr, NvSwapchain *sc) {
-    if (!fr || !sc) {
-        return -1;
-    }
-
+/* Shared submit + present logic. */
+static int submit_and_present(NvFrame *fr, NvSwapchain *sc) {
     uint32_t        f   = fr->current_frame;
     VkCommandBuffer cmd = fr->cmd[f];
 
-    vkCmdEndRenderPass(cmd);
-    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
-        return -1;
-    }
-
-    /* Submit */
     VkSemaphore wait_sems[]   = {fr->image_available[f]};
     VkSemaphore signal_sems[] = {fr->render_finished[f]};
     VkPipelineStageFlags wait_stages[] = {
@@ -222,7 +213,6 @@ int nv_frame_end(NvFrame *fr, NvSwapchain *sc) {
         return -1;
     }
 
-    /* Present */
     VkPresentInfoKHR present;
     memset(&present, 0, sizeof(present));
     present.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -247,62 +237,33 @@ int nv_frame_end(NvFrame *fr, NvSwapchain *sc) {
     return 1;
 }
 
+int nv_frame_end(NvFrame *fr, NvSwapchain *sc) {
+    if (!fr || !sc) {
+        return -1;
+    }
+
+    VkCommandBuffer cmd = fr->cmd[fr->current_frame];
+
+    vkCmdEndRenderPass(cmd);
+    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
+        return -1;
+    }
+
+    return submit_and_present(fr, sc);
+}
+
 int nv_frame_submit(NvFrame *fr, NvSwapchain *sc) {
     if (!fr || !sc) {
         return -1;
     }
 
-    uint32_t        f   = fr->current_frame;
-    VkCommandBuffer cmd = fr->cmd[f];
+    VkCommandBuffer cmd = fr->cmd[fr->current_frame];
 
     if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
         return -1;
     }
 
-    VkSemaphore wait_sems[]   = {fr->image_available[f]};
-    VkSemaphore signal_sems[] = {fr->render_finished[f]};
-    VkPipelineStageFlags wait_stages[] = {
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-
-    VkSubmitInfo submit;
-    memset(&submit, 0, sizeof(submit));
-    submit.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit.waitSemaphoreCount   = 1;
-    submit.pWaitSemaphores      = wait_sems;
-    submit.pWaitDstStageMask    = wait_stages;
-    submit.commandBufferCount   = 1;
-    submit.pCommandBuffers      = &cmd;
-    submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores    = signal_sems;
-
-    if (vkQueueSubmit(fr->graphics_queue, 1, &submit,
-                      fr->in_flight[f])
-        != VK_SUCCESS) {
-        return -1;
-    }
-
-    VkPresentInfoKHR present;
-    memset(&present, 0, sizeof(present));
-    present.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    present.waitSemaphoreCount = 1;
-    present.pWaitSemaphores    = signal_sems;
-    present.swapchainCount     = 1;
-    present.pSwapchains        = &sc->handle;
-    present.pImageIndices      = &fr->image_index;
-
-    VkResult res = vkQueuePresentKHR(fr->present_queue, &present);
-
-    fr->current_frame =
-        (fr->current_frame + 1) % NV_MAX_FRAMES_IN_FLIGHT;
-
-    if (res == VK_ERROR_OUT_OF_DATE_KHR
-        || res == VK_SUBOPTIMAL_KHR) {
-        return 0;
-    }
-    if (res != VK_SUCCESS) {
-        return -1;
-    }
-    return 1;
+    return submit_and_present(fr, sc);
 }
 
 /* ----------------------------------------------------------------

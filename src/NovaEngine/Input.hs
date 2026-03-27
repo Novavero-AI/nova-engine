@@ -13,6 +13,7 @@ module NovaEngine.Input
 
     -- * Per-frame
     inputPoll,
+    inputPollWithWindow,
 
     -- * Keyboard
     inputKeyDown,
@@ -45,6 +46,7 @@ import Foreign.ForeignPtr
     withForeignPtr,
   )
 import Foreign.Ptr (FunPtr, Ptr, nullPtr)
+import NovaEngine.Render.Window (Window, withWindowPtr)
 
 -- ----------------------------------------------------------------
 -- Handle
@@ -64,7 +66,7 @@ foreign import ccall unsafe "&nv_input_destroy"
   c_nv_input_destroy :: FunPtr (Ptr () -> IO ())
 
 foreign import ccall unsafe "nv_input_poll"
-  c_nv_input_poll :: Ptr () -> IO CInt
+  c_nv_input_poll :: Ptr () -> Ptr () -> IO CInt
 
 foreign import ccall unsafe "nv_input_key_down"
   c_nv_input_key_down :: Ptr () -> CInt -> IO CInt
@@ -132,9 +134,22 @@ destroyInput (Input fptr) = finalizeForeignPtr fptr
 
 -- | Poll SDL3 events and update input state.
 -- Returns 'True' to continue, 'False' on quit.
+-- Does not forward window events — use 'inputPollWithWindow'
+-- instead when both input and window are active.
 inputPoll :: Input -> IO Bool
 inputPoll (Input fptr) =
-  withForeignPtr fptr $ fmap (== 1) . c_nv_input_poll
+  withForeignPtr fptr $ \p ->
+    fmap (== 1) (c_nv_input_poll p nullPtr)
+
+-- | Poll SDL3 events, forwarding quit and resize events to the
+-- window. Use this instead of calling both 'inputPoll' and
+-- 'NovaEngine.Render.Window.pollEvents' — one event poller per
+-- frame avoids events being split between consumers.
+inputPollWithWindow :: Input -> Window -> IO Bool
+inputPollWithWindow (Input fptr) win =
+  withForeignPtr fptr $ \p ->
+    withWindowPtr win $ \wPtr ->
+      fmap (== 1) (c_nv_input_poll p wPtr)
 
 -- ----------------------------------------------------------------
 -- Keyboard

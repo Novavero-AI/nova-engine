@@ -137,7 +137,7 @@ centroid :: [V3] -> V3
 centroid [] = V3 0 0 0
 centroid pts =
   let count = length pts
-      V3 sx sy sz = foldl1 (^+^) pts
+      V3 sx sy sz = foldl' (^+^) vzero pts
       inv = 1.0 / fromIntegral count
    in V3 (sx * inv) (sy * inv) (sz * inv)
 

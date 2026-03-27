@@ -20,6 +20,7 @@ NvCompute *nv_compute_create(NvDevice *dev,
                               uint32_t push_size,
                               const char *shader_path) {
     if (!dev || !shader_path) return NULL;
+    if (binding_count > 0 && !bindings) return NULL;
 
     NvCompute *comp = calloc(1, sizeof(NvCompute));
     if (!comp) return NULL;

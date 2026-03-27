@@ -13,6 +13,8 @@
 
 #include <stdint.h>
 
+#include "nv_window.h"
+
 #define NV_MAX_KEYS        512
 #define NV_MAX_MOUSE_BTNS  8
 #define NV_MAX_ACTIONS     64
@@ -65,9 +67,11 @@ void nv_input_destroy(NvInput *input);
 
 /* Poll SDL3 events and update input state.
  * Call once per frame before querying state.
+ * If window is non-NULL, quit and resize events are forwarded
+ * to the window (so nv_window_poll_events is not needed).
  * Returns 1 if the application should continue, 0 if quit
  * was requested. */
-int nv_input_poll(NvInput *input);
+int nv_input_poll(NvInput *input, NvWindow *window);
 
 /* ----------------------------------------------------------------
  * Raw state queries

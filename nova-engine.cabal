@@ -10,8 +10,8 @@ description:
 
 license:            BSD-3-Clause
 license-file:       LICENSE
-author:             Devon Tomlin
-maintainer:         devon.tomlin@novavero.ai
+author:             Devon Tomlin, Kyle Jensen
+maintainer:         team@novavero.ai
 homepage:           https://github.com/Novavero-AI/nova-engine
 bug-reports:        https://github.com/Novavero-AI/nova-engine/issues
 category:           Graphics, Game
@@ -136,7 +136,6 @@ library
 
   build-depends:
       base          >= 4.19 && < 5
-    , bytestring    >= 0.11 && < 0.13
     , containers    >= 0.6  && < 0.8
     , array         >= 0.5  && < 0.6
 

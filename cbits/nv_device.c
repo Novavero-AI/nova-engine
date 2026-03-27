@@ -54,9 +54,12 @@ NvDevice *nv_device_create(NvInstance *inst) {
     }
 
     /* ---- Required device features ---- */
+    VkPhysicalDeviceFeatures supported;
+    vkGetPhysicalDeviceFeatures(inst->physical_device, &supported);
+
     VkPhysicalDeviceFeatures features;
     memset(&features, 0, sizeof(features));
-    features.depthClamp = VK_TRUE;
+    features.depthClamp = supported.depthClamp;
 
     /* ---- Logical device ---- */
     VkDeviceCreateInfo create_info;

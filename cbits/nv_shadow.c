@@ -432,6 +432,9 @@ void nv_shadow_destroy(NvShadow *shadow) {
 
 void nv_shadow_begin_pass(NvShadow *shadow, NvFrame *fr,
                           uint32_t cascade_index) {
+    if (!shadow || !fr || cascade_index >= NV_SHADOW_CASCADE_COUNT) {
+        return;
+    }
     VkCommandBuffer cmd = fr->cmd[fr->current_frame];
 
     VkClearValue clear;

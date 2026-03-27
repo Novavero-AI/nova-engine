@@ -27,7 +27,7 @@ import Foreign.Storable (Storable (..), pokeByteOff, pokeElemOff)
 import NovaEngine.Animation.Pose (Pose, applyPoseFull)
 import NovaEngine.Animation.Skeleton (Skeleton, skelJoints, skelRestPositions)
 import NovaEngine.Animation.Skin (BoneWeight (..), SkinVertex (..))
-import NovaEngine.Math.Matrix (mulM44, rotation, translation)
+import NovaEngine.Math.Matrix (identity, mulM44, rotation, translation)
 import NovaEngine.Math.Quaternion (identityQuat)
 import NovaEngine.Math.Types
 import NovaEngine.Mesh.Types (Vertex (..))
@@ -145,7 +145,7 @@ computeBoneMatrices skel pose =
         [ computeOneMatrix posedPositions posedRotations restPositions j
         | j <- [0 .. jointCount - 1]
         ]
-      padding = replicate (maxBones - length matrices) identityM44
+      padding = replicate (maxBones - length matrices) identity
    in take maxBones (matrices ++ padding)
 
 -- | Compute the bone matrix for a single joint.
@@ -174,12 +174,3 @@ uploadBoneMatrices buf skel pose =
     let matrices = computeBoneMatrices skel pose
         fp = castPtr ptr :: Ptr M44
     mapM_ (uncurry (pokeElemOff fp)) (zip [0 ..] matrices)
-
--- | Identity matrix.
-identityM44 :: M44
-identityM44 =
-  M44
-    (V4 1 0 0 0)
-    (V4 0 1 0 0)
-    (V4 0 0 1 0)
-    (V4 0 0 0 1)

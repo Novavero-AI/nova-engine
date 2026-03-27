@@ -33,7 +33,7 @@ void nv_input_destroy(NvInput *input) {
  * Per-frame update
  * ---------------------------------------------------------------- */
 
-int nv_input_poll(NvInput *input) {
+int nv_input_poll(NvInput *input, NvWindow *window) {
     if (!input) return 0;
 
     /* Clear per-frame state */
@@ -46,11 +46,18 @@ int nv_input_poll(NvInput *input) {
     input->scroll_x = 0.0f;
     input->scroll_y = 0.0f;
 
+    if (window) {
+        window->was_resized = 0;
+    }
+
     /* Poll SDL events */
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
         case SDL_EVENT_QUIT:
+            if (window) {
+                window->should_close = 1;
+            }
             return 0;
 
         case SDL_EVENT_KEY_DOWN:
@@ -93,6 +100,16 @@ int nv_input_poll(NvInput *input) {
                 input->mouse_released[btn] = 1;
             }
         } break;
+
+        case SDL_EVENT_WINDOW_RESIZED:
+            if (window) {
+                window->was_resized = 1;
+                int pw = 0, ph = 0;
+                SDL_GetWindowSizeInPixels(window->handle, &pw, &ph);
+                window->width  = (uint32_t)pw;
+                window->height = (uint32_t)ph;
+            }
+            break;
 
         case SDL_EVENT_MOUSE_WHEEL:
             input->scroll_x += event.wheel.x;
