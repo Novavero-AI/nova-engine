@@ -185,8 +185,24 @@ jobs:
           # pkg-config (via choco)
           choco install pkgconfiglite -y
 
+          # Vulkan SDK on Windows has no .pc file — create one for cabal
+          $PC_DIR = "$env:VULKAN_SDK\Lib\pkgconfig"
+          New-Item -ItemType Directory -Force -Path $PC_DIR | Out-Null
+          $prefix = $env:VULKAN_SDK -replace '\\','/'
+          @"
+          prefix=$prefix
+          libdir=`${prefix}/Lib
+          includedir=`${prefix}/Include
+
+          Name: Vulkan-Loader
+          Description: Vulkan Loader
+          Version: $VK_VERSION
+          Libs: -L`${libdir} -lvulkan-1
+          Cflags: -I`${includedir}
+          "@ -replace '(?m)^          ','' | Out-File -FilePath "$PC_DIR\vulkan.pc" -Encoding ascii
+
           # Write combined PKG_CONFIG_PATH once (multiple writes overwrite each other)
-          echo "PKG_CONFIG_PATH=$SDL_DIR\lib\pkgconfig;$env:VULKAN_SDK\Lib\pkgconfig" >> $env:GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$SDL_DIR\lib\pkgconfig;$PC_DIR" >> $env:GITHUB_ENV
 
       - uses: haskell-actions/setup@v2
         id: setup-haskell
