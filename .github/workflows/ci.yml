@@ -203,6 +203,8 @@ jobs:
 
           # Write combined PKG_CONFIG_PATH once (multiple writes overwrite each other)
           echo "PKG_CONFIG_PATH=$SDL_DIR\lib\pkgconfig;$PC_DIR" >> $env:GITHUB_ENV
+          # SDL3.dll must be on PATH for test exe to run
+          echo "$SDL_DIR\bin" >> $env:GITHUB_PATH
 
       - uses: haskell-actions/setup@v2
         id: setup-haskell
