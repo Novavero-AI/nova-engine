@@ -236,7 +236,9 @@ int nv_frame_end(NvFrame *fr, NvSwapchain *sc) {
 void nv_frame_push_constants(NvFrame *fr, NvPipeline *pip,
                              const void *data, uint32_t size) {
     vkCmdPushConstants(fr->cmd[fr->current_frame], pip->layout,
-                       VK_SHADER_STAGE_VERTEX_BIT, 0, size, data);
+                       VK_SHADER_STAGE_VERTEX_BIT
+                           | VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, size, data);
 }
 
 void nv_frame_bind_vertex_buffer(NvFrame *fr, NvBuffer *buf) {

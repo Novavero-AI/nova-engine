@@ -11,7 +11,12 @@ module NovaEngine.Render.Buffer
     -- * Lifecycle
     createVertexBuffer,
     createIndexBuffer,
+    createHostBuffer,
     destroyBuffer,
+
+    -- * Host-visible buffer operations
+    withMappedBuffer,
+    bufferVkHandle,
 
     -- * Internal (for other Render modules)
     withBufferPtr,
@@ -50,8 +55,20 @@ foreign import ccall unsafe "nv_buffer_create_index"
   c_nv_buffer_create_index ::
     Ptr () -> Ptr () -> Ptr () -> Word32 -> IO (Ptr ())
 
+foreign import ccall unsafe "nv_buffer_create_host"
+  c_nv_buffer_create_host :: Ptr () -> Word32 -> IO (Ptr ())
+
 foreign import ccall unsafe "&nv_buffer_destroy"
   c_nv_buffer_destroy :: FunPtr (Ptr () -> IO ())
+
+foreign import ccall unsafe "nv_buffer_map"
+  c_nv_buffer_map :: Ptr () -> IO (Ptr ())
+
+foreign import ccall unsafe "nv_buffer_unmap"
+  c_nv_buffer_unmap :: Ptr () -> IO ()
+
+foreign import ccall unsafe "nv_buffer_vk_handle"
+  c_nv_buffer_vk_handle :: Ptr () -> IO (Ptr ())
 
 -- ----------------------------------------------------------------
 -- Lifecycle
@@ -103,9 +120,35 @@ createIndexBuffer dev alloc indices =
             bytes
         wrapBuffer ptr
 
+-- | Create a host-visible buffer for per-frame uniform data.
+--
+-- Use 'withMappedBuffer' to write data each frame.
+-- Returns 'Nothing' if allocation fails.
+createHostBuffer :: Allocator -> Word32 -> IO (Maybe Buffer)
+createHostBuffer alloc byteSize =
+  withAllocatorPtr alloc $ \allocPtr -> do
+    ptr <- c_nv_buffer_create_host allocPtr byteSize
+    wrapBuffer ptr
+
 -- | Destroy the buffer and free GPU memory.
 destroyBuffer :: Buffer -> IO ()
 destroyBuffer (Buffer fptr) = finalizeForeignPtr fptr
+
+-- | Map a host-visible buffer, run an action with the mapped
+-- pointer, then unmap.  The pointer is only valid inside the
+-- action.
+withMappedBuffer :: Buffer -> (Ptr () -> IO a) -> IO a
+withMappedBuffer (Buffer fptr) action =
+  withForeignPtr fptr $ \bufPtr -> do
+    mapped <- c_nv_buffer_map bufPtr
+    result <- action mapped
+    c_nv_buffer_unmap bufPtr
+    pure result
+
+-- | Get the raw @VkBuffer@ handle (for descriptor writes).
+bufferVkHandle :: Buffer -> IO (Ptr ())
+bufferVkHandle (Buffer fptr) =
+  withForeignPtr fptr c_nv_buffer_vk_handle
 
 -- ----------------------------------------------------------------
 -- Internal

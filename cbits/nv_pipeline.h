@@ -19,8 +19,8 @@
 #include "nv_device.h"
 #include "nv_swapchain.h"
 
-/* Push constant size: one mat4 (model). */
-#define NV_PUSH_CONSTANT_SIZE 64
+/* Push constant size: mat4 model (64) + material params (64). */
+#define NV_PUSH_CONSTANT_SIZE 128
 
 /* ----------------------------------------------------------------
  * Types

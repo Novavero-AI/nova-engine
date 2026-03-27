@@ -48,6 +48,7 @@ import NovaEngine.Mesh.Types
 import NovaEngine.Mesh.UV
 import NovaEngine.Mesh.Weld
 import NovaEngine.Noise
+import NovaEngine.Render.Material
 import NovaEngine.Render.Texture (calcMipLevels)
 import NovaEngine.SDF
 import NovaEngine.SDF.DualContour
@@ -102,7 +103,8 @@ tests =
       testGroup "Import" importTests,
       testGroup "Texture" textureTests,
       testGroup "Scene" sceneTests,
-      testGroup "Camera" cameraTests
+      testGroup "Camera" cameraTests,
+      testGroup "Material" materialTests
     ]
 
 -- ----------------------------------------------------------------
@@ -2379,4 +2381,48 @@ cameraTests =
       once $
         let cam = Camera vzero identityQuat (Orthographic (-10) 10 (-10) 10 0.1 100.0)
          in approxEqM44 (projectionMatrix cam) (ortho (-10) 10 (-10) 10 0.1 100.0)
+  ]
+
+-- ----------------------------------------------------------------
+-- Material
+-- ----------------------------------------------------------------
+
+materialTests :: [TestTree]
+materialTests =
+  [ QC.testProperty "packParams produces 16 floats" $
+      once $
+        length (packParams defaultParams) == 16,
+    QC.testProperty "defaultParams roughness > 0" $
+      once $
+        paramRoughness defaultParams > 0,
+    QC.testProperty "defaultParams metallic in [0,1]" $
+      once $
+        paramMetallic defaultParams >= 0
+          && paramMetallic defaultParams <= 1,
+    QC.testProperty "packParams albedoFactor matches V4" $
+      once $
+        let V4 r g b a = paramAlbedoFactor defaultParams
+            packed = packParams defaultParams
+         in take 4 packed == [r, g, b, a],
+    QC.testProperty "defaultMaterial has no textures" $
+      once $
+        isNothing (materialAlbedo defaultMaterial)
+          && isNothing (materialNormal defaultMaterial)
+          && isNothing (materialMetallicRoughness defaultMaterial)
+          && isNothing (materialAO defaultMaterial)
+          && isNothing (materialEmissive defaultMaterial),
+    QC.testProperty "defaultParams UV scale is (1,1)" $
+      once $
+        paramUVScale defaultParams == V2 1 1,
+    QC.testProperty "defaultParams UV offset is (0,0)" $
+      once $
+        paramUVOffset defaultParams == V2 0 0,
+    QC.testProperty "packParams emissive at correct offset" $
+      once $
+        let V4 er eg eb ei = paramEmissiveFactor defaultParams
+            packed = packParams defaultParams
+         in packed !! 4 == er
+              && packed !! 5 == eg
+              && packed !! 6 == eb
+              && packed !! 7 == ei
   ]

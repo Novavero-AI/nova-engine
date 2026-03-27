@@ -45,7 +45,20 @@ NvBuffer *nv_buffer_create_index(NvDevice *dev, NvAllocator *alloc,
                                  const void *data,
                                  uint32_t byte_size);
 
+/* Create a host-visible buffer (for UBOs updated per frame).
+ * Returns NULL on failure. */
+NvBuffer *nv_buffer_create_host(NvAllocator *alloc, uint32_t byte_size);
+
 /* Destroy the buffer and free its allocation. */
 void nv_buffer_destroy(NvBuffer *buf);
+
+/* Map a host-visible buffer.  Returns NULL on failure. */
+void *nv_buffer_map(NvBuffer *buf);
+
+/* Unmap a previously mapped buffer. */
+void nv_buffer_unmap(NvBuffer *buf);
+
+/* Get the raw VkBuffer handle (for descriptor writes). */
+VkBuffer nv_buffer_vk_handle(const NvBuffer *buf);
 
 #endif /* NV_BUFFER_H */

@@ -131,7 +131,8 @@ static int create_layout(NvPipeline *pip,
                          uint32_t set_layout_count) {
     VkPushConstantRange push;
     memset(&push, 0, sizeof(push));
-    push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+                    | VK_SHADER_STAGE_FRAGMENT_BIT;
     push.offset     = 0;
     push.size       = NV_PUSH_CONSTANT_SIZE;
 

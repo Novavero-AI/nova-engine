@@ -81,6 +81,7 @@ library
     NovaEngine.Render.Frame
     NovaEngine.Render.Descriptor
     NovaEngine.Render.Texture
+    NovaEngine.Render.Material
     -- Scene
     NovaEngine.Scene
     NovaEngine.Scene.Camera
